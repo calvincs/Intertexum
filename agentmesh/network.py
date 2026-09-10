@@ -140,6 +140,9 @@ def dispatch(node, peer_id, request):
     if not isinstance(request, dict) or set(request) != {"op", "args"} or not isinstance(request["args"], dict):
         raise Invalid("invalid request schema")
     op, args = request["op"], request["args"]
+    if op == 'message_challenge' and set(args)=={'operation','id','thread','offer'}:
+        from .message_work import challenge
+        return challenge(node,peer_id,**args)
     if op == 'capabilities' and not args:
         from .peer_status import describe
         return describe(node, peer_id)
@@ -149,9 +152,9 @@ def dispatch(node, peer_id, request):
     if op == "threads" and set(args)<={"thread","after","since_ms","until_ms","limit"}:
         from .conversations import page
         return page(node,peer_id,**args)
-    if op == "thread_post" and set(args)=={"post"}:
+    if op == "thread_post" and {"post"}<=set(args)<={"post","admission"}:
         from .conversations import accept
-        return accept(node,args["post"],peer_id)
+        return accept(node,args["post"],peer_id,args.get("admission"))
     if op == "search" and set(args) <= {"query_text", "query_vector", "model", "k"}:
         return node.search(peer_id, **args)
     if op == "get" and set(args) == {"id"}:
@@ -160,8 +163,8 @@ def dispatch(node, peer_id, request):
         return node.get(args["id"], peer_id)
     if op == "retractions" and set(args) <= {"after"}:
         return node.retractions(peer_id, **args)
-    if op == "message" and set(args) == {"message"}:
-        return {"id": node.receive_message(args["message"], peer_id)}
+    if op == "message" and {"message"}<=set(args)<={"message","admission"}:
+        return {"id": node.receive_message(args["message"], peer_id,args.get("admission"))}
     raise Invalid("unsupported operation or arguments")
 
 
@@ -279,11 +282,30 @@ class Client:
         return response
 
     def request(self, op, **args):
+        try:
+            return self._request(op,**args)
+        except Denied as exc:
+            from .message_work import REQUIRED, solve_for
+            if op not in ('message','thread_post') or str(exc)!=REQUIRED or 'admission' in args:
+                raise
+            obj=args['message' if op=='message' else 'post']
+            if obj['body'].get('version')==3:
+                raise
+            admission=solve_for(self,op,obj)
+            try:
+                return self._request(op,**args,admission=admission)
+            except Denied as failure:
+                if str(failure)=='invalid or expired message work':
+                    with self.node.transaction():
+                        self.node.db.execute('UPDATE message_work_out SET ticket=NULL,nonce=NULL WHERE id=?',(obj['id'],))
+                raise
+
+    def _request(self, op, **args):
         self.node.capability("network")
         if op=="search":self.node.capability("search")
         if op=="get":self.node.capability("fetch")
-        if op in ("message","thread_post"):self.node.capability("send")
-        if op in ("threads","thread_post"):self.node.capability("threads")
+        if op in ("message","thread_post","message_challenge"):self.node.capability("send")
+        if op in ("threads","thread_post") or (op=="message_challenge" and args.get("operation")=="thread_post"):self.node.capability("threads")
         self.node.peer(self.peer_id)
         if self.node.defense.blocked(peer=self.peer_id):
             raise Denied('peer blocked by local policy')
@@ -425,4 +447,4 @@ class Client:
         raise Invalid("retraction sweep exceeded limit")
 
     def send(self, content):
-        return self.request("message", message=self.node.make_message(self.peer_id, content))
+        return self.request("message", message=self.node.make_message(self.peer_id, content, expires=int(time.time())+604800))

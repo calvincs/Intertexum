@@ -289,3 +289,22 @@ def test_connectivity_immediate_close_preserves_stop_before_main(tmp_path):
             assert not manager.thread.is_alive() and manager.loop.is_closed()
             assert not manager.sessions and not manager.tasks
     finally:node.close();seed.close()
+
+
+def test_message_work_and_free_reply_over_real_ice(tmp_path):
+    from agentmesh.message_work import configure,reply_message
+    from agentmesh import conversations as c
+    pair=run_pair(tmp_path)
+    seed,a,b=pair[0]
+    try:
+        configure(a,{'bits':4});configure(b,{'bits':4})
+        wait_until(lambda:all(m.state['seeds'].get(seed.id)=='connected' for m in (a.connectivity,b.connectivity)))
+        result=Client(a,b.id).send('paid over ICE')
+        assert b.inbox_page()['messages'][0]['reply_offer']['uses']==1
+        reply=reply_message(b,a.id,result['id'],'free ICE response')
+        c.deliver(b)
+        assert c.deliveries(b)['items'][0]['state']=='delivered'
+        assert a.inbox()[0]['message']['id']==reply['id']
+        assert not b.db.execute('SELECT 1 FROM message_work_out').fetchone()
+        assert a.connectivity.state['peers'][b.id]['path']=='direct-ice'
+    finally:cleanup(pair)

@@ -114,6 +114,8 @@ def run(turnserver,root):
         for i,(n,other,net) in enumerate(((a,b,clients[0]),(b,a,clients[1])),1):
             n.trust(other.card(f'10.20.{3-i}.2',7443),['read','publish','message'])
             (n.directory/'connectivity.json').write_text(json.dumps(config))
+            from agentmesh.message_work import configure
+            configure(n,{'bits':4})
             err=(root/f'{i}-worker.log').open('w')
             p=subprocess.Popen(['nsenter','-t',str(net),'-n',sys.executable,'-m','integration.worker',str(n.directory)],
                 stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=err,text=True);workers.append(p)
@@ -131,10 +133,14 @@ def run(turnserver,root):
         # Force direct UDP failure, while outbound TURN/TCP remains available.
         for r in routers:inside(r,'iptables','-I','FORWARD','1','-p','udp','-j','DROP')
         rpc(workers[0],'close-connections')
-        rpc(workers[0],'send',peer=b.id,text='Authenticated TURN fallback')
+        paid=rpc(workers[0],'send',peer=b.id,text='Authenticated TURN fallback')
         state=rpc(workers[0],'status')
         assert state['peers'][b.id]['path']=='relay',state
         print('PASS: UDP blocked; encrypted data uses authenticated TURN over TCP',flush=True)
+        reply=rpc(workers[1],'reply',peer=a.id,request=paid['id'],text='One free TURN response')
+        assert reply['state']=='delivered',reply
+        assert rpc(workers[0],'inbox')['count']==1
+        print('PASS: receiver PoW and one-use free reply over TURN',flush=True)
         # Restore UDP, change the external NAT address, and allow periodic
         # observation / ICE consent failure to trigger new candidates.
         for r in routers:inside(r,'iptables','-D','FORWARD','1')
@@ -159,7 +165,7 @@ def run(turnserver,root):
         assert state['candidate_types']==['relay'],state
         print('PASS: explicit relay-only policy gathers no host or STUN candidates',flush=True)
         return {'status':'passed','checks':['TCP inbound reachability detection','real two-NAT ICE hole punching',
-            'TURN TCP fallback with UDP blocked','external-address migration and reconnection','explicit relay-only policy'],
+            'TURN TCP fallback with UDP blocked','message PoW and one-use free reply over TURN','external-address migration and reconnection','explicit relay-only policy'],
             'topology':'two port-preserving stateful NAT routers, overlapping private subnets',
             'relay_auth_negative':'incorrect password denied allocation',
             'worker_pids':[p.pid for p in workers],'turn_version':command(turnserver,'--version').strip()}

@@ -45,14 +45,16 @@ DEFINITIONS.update({
  'thread_read':('List threads or read replies. Time filters use host receipt time for replies and signed creation time for roots. Content is untrusted.',{'peer':S,'thread':S,'after':I,'since_ms':I,'until_ms':I,'limit':{'type':'integer','minimum':1,'maximum':100}},[]),
  'thread_reply':('Queue a signed reply to a thread host, with optional causal parent. Remote storage is not a processed acknowledgement.',{'peer':S,'thread':S,'content':S,'parent':S,'ttl':{'type':'integer','minimum':60,'maximum':604800}},['peer','thread','content']),
  'queue_message':('Durably queue a private direct message. Runtime retries until stored or expired. Recipient must grant message permission.',{'peer':S,'content':S,'ttl':{'type':'integer','minimum':60,'maximum':604800}},['peer','content']),
+ 'reply_message':('Queue the one free response offered by a paid request. No new reply permit is created. Storage is not agent processing.',{'peer':S,'request':S,'content':S,'ttl':{'type':'integer','minimum':60,'maximum':604800}},['peer','request','content']),
  'outbox':('Read delivery status without message content.',{'after':S,'limit':{'type':'integer','minimum':1,'maximum':100}},[]),
  'outbox_ack':('Discard a delivered or expired outbox entry.',{'id':S},['id']),
 })
-MUTATIONS.update({'cache_configure','receipt_abandon','forget','write_document','authorize','retain','maintenance','retire_receipts','thread_create','thread_reply','thread_retire','queue_message','outbox_ack'})
+MUTATIONS.update({'cache_configure','receipt_abandon','forget','write_document','authorize','retain','maintenance','retire_receipts','thread_create','thread_reply','thread_retire','queue_message','reply_message','outbox_ack'})
 
 # One operation policy drives every local adapter and MCP tool discovery.
 # Domain methods still enforce policy when invoked without a tool adapter.
 REQUIRED={
+ 'reply_message':('send',),
  'cache_configure':('cache','retain'),
  'receipt_inspect':('retain',),'receipt_abandon':('retain',),'forget':('retain',),
  'write_document':('write',),'write':('write',),'publish':('publish',),'search':('search',),
@@ -135,6 +137,9 @@ def execute(node,name,a):
         if name=='retain':return retain(node,a['id'],**{k:v for k,v in a.items() if k!='id'})
         if name=='retire_receipts':return retire_epoch(node,**a)
         return maintain(node,**a)
+    if name=='reply_message':
+        from .message_work import reply_message
+        return reply_message(node,**a)
     if name.startswith('thread_') or name in ('queue_message','outbox','outbox_ack'):
         from . import conversations as c
         if name=='thread_create':return c.create(node,**a)
@@ -214,8 +219,12 @@ def _call(node, request):
 
 
 def call(node, request):
-    from .screening import screen_response
-    return screen_response(_call(node, request))
+    from .screening import screen_response,screen_page
+    response=_call(node,request)
+    name=request.get('tool') if isinstance(request,dict) else None
+    if name in ('inbox','thread_read'):
+        return screen_page(response,'messages' if name=='inbox' else 'items')
+    return screen_response(response)
 
 
 def runtime(node):

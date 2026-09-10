@@ -18,6 +18,12 @@ def main():
                 try:
                     if args['op']=='status':result=node.connectivity.state
                     elif args['op']=='send':result=Client(node,args['peer']).send(args['text'])
+                    elif args['op']=='reply':
+                        from agentmesh.message_work import reply_message
+                        from agentmesh.conversations import deliver,deliveries
+                        queued=reply_message(node,args['peer'],args['request'],args['text'])
+                        deliver(node)
+                        result=next(x for x in deliveries(node)['items'] if x['id']==queued['id'])
                     elif args['op']=='relay-only':
                         node.connectivity.config['relay_only']=True
                         result={'configured':True}

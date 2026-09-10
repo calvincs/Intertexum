@@ -88,6 +88,8 @@ class Node:
         lifecycle_schema(self);open_schema(self)
         from .conversations import schema as conversation_schema
         conversation_schema(self)
+        from .message_work import schema as message_schema
+        message_schema(self)
         from .cache import schema as cache_schema
         cache_schema(self)
         self._migrate_retractions()
@@ -628,29 +630,32 @@ class Node:
             return {"events": events,
                     "next": rows[-1]["id"] if len(rows) == 500 else None}
 
-    def make_message(self, recipient, content, *, expires=None):
+    def make_message(self, recipient, content, *, expires=None, reply_to=None, permit=None):
         self.capability('send')
         self.peer(recipient)
         text(content)
         import uuid
         return sign(self.identity.key, MESSAGE_DOMAIN,
-                    {"version": 2 if expires is not None else 1, "origin": self.id, "recipient": recipient,
-                     "text": content, "nonce": uuid.uuid4().hex, **({"expires":expires} if expires is not None else {})})
+                    {"version": 3 if reply_to is not None else (2 if expires is not None else 1), "origin": self.id, "recipient": recipient,
+                     "text": content, "nonce": uuid.uuid4().hex, **({"expires":expires} if expires is not None else {}),
+                     **({"reply_to":reply_to,"permit":permit} if reply_to is not None else {})})
 
-    def receive_message(self, obj, requester):
+    def receive_message(self, obj, requester, admission=None):
         self.capability('receive')
         with self.transaction():
             self.require(requester, "message")
             body = verify(obj, self._key(requester), MESSAGE_DOMAIN)
-            if (set(body) != ({"version", "origin", "recipient", "text", "nonce"} | ({"expires"} if body.get("version")==2 else set()))
-                    or type(body["version"]) is not int or body["version"] not in (1,2)
+            if (set(body) != ({"version", "origin", "recipient", "text", "nonce"} | ({"expires"} if body.get("version") in (2,3) else set()) | ({"reply_to","permit"} if body.get("version")==3 else set()))
+                    or type(body["version"]) is not int or body["version"] not in (1,2,3)
                     or body["origin"] != requester or body["recipient"] != self.id
                     or not isinstance(body["nonce"], str) or len(body["nonce"]) != 32):
                 raise Invalid("invalid direct message")
             text(body["text"])
+            if body["version"]==3 and (not valid_id(body["reply_to"]) or not valid_id(body["permit"])):
+                raise Invalid("invalid reply binding")
             now=int(time.time())
             expiry=body.get('expires',0)
-            if body['version']==2 and (type(expiry) is not int or not now<expiry<=now+604800):raise Denied('message expired or invalid expiry')
+            if body['version'] in (2,3) and (type(expiry) is not int or not now<expiry<=now+604800):raise Denied('message expired or invalid expiry')
             self.db.execute('DELETE FROM received_ids WHERE expires>0 AND expires<=?',(now,))
             if self.db.execute('SELECT 1 FROM received_ids WHERE id=?',(obj['id'],)).fetchone():return obj['id']
             if self.db.execute('SELECT count(*) FROM received_ids').fetchone()[0]>=20000:raise Denied('message replay budget reached')
@@ -658,6 +663,8 @@ class Node:
             if self.db.execute('SELECT 1 FROM messages WHERE id=?',(obj['id'],)).fetchone():return obj['id']
             if self.db.execute("SELECT count(*) FROM messages").fetchone()[0] >= MAX_RECORDS:
                 raise Denied("inbox quota reached")
+            from .message_work import admit
+            admit(self,obj,requester,"message",admission)
             self.db.execute("INSERT OR IGNORE INTO messages VALUES(?,?)", (obj["id"], canonical(obj).decode()))
             return obj["id"]
 

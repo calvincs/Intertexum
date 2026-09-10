@@ -49,6 +49,7 @@ connectivity.json
 connectivity-status.json
 connectivity-suspended
 policy.json
+message-policy.json
 runtime.lock
 manifest.json
 

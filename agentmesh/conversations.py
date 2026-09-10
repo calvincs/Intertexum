@@ -81,7 +81,7 @@ def create(node,content,members):
     return {'id':obj['id'],'host':node.id,'root':obj,'untrusted_data':True}
 
 
-def accept(node,obj,requester):
+def accept(node,obj,requester,admission=None):
     node.capability('threads');node.capability('receive')
     b=checked(obj)
     if b['kind']!='reply' or b['origin']!=requester:raise Invalid('reply sender mismatch')
@@ -98,6 +98,9 @@ def accept(node,obj,requester):
         if b['parent']!=b['thread'] and not node.db.execute('SELECT 1 FROM posts WHERE id=? AND thread=?',(b['parent'],b['thread'])).fetchone():raise Invalid('parent not in this thread')
         if node.db.execute('SELECT 1 FROM posts WHERE id=?',(obj['id'],)).fetchone():return {'id':obj['id']}
         if node.db.execute('SELECT count(*) FROM posts').fetchone()[0]>=10000:raise Denied('post quota reached')
+        if requester!=node.id:
+            from .message_work import admit
+            admit(node,obj,requester,'thread_post',admission)
         node.db.execute('INSERT INTO posts(id,thread,received,wire) VALUES(?,?,?,?)',(obj['id'],b['thread'],int(time.time()*1000),canonical(obj).decode()))
     return {'id':obj['id']}
 
@@ -124,6 +127,10 @@ def page(node,requester,*,thread=None,after=0,since_ms=0,until_ms=2**63-1,limit=
                 if not since_ms<=obj['body']['created_ms']<=until_ms:cursor=row['seq'];continue
             entry={'object':obj,'cursor':row['seq'],'untrusted_data':True}
             if thread is not None:entry['received_ms']=row['received']
+            if requester==node.id:
+                from .message_work import reply_info
+                offered=reply_info(node,obj['id'])
+                if offered:entry['reply_offer']=offered
             cost=len(canonical(entry))
             if size+cost>PAGE_BYTES:break
             entries.append(entry);cursor=row['seq'];size+=cost
@@ -194,7 +201,7 @@ def _claim_delivery(node, *, paced=False):
     node.capability('send');node.capability('network')
     now=int(time.time())
     with node.transaction():
-        node.db.execute("UPDATE outbox SET state='expired' WHERE state='queued' AND expires<=?",(now,))
+        node.db.execute("UPDATE outbox SET state='expired' WHERE state IN ('queued','paused') AND expires<=?",(now,))
         active=getattr(node,'_delivery_peers',None)
         if active is None:
             active=node._delivery_peers=set()
@@ -208,7 +215,7 @@ def _claim_delivery(node, *, paced=False):
         row=node.db.execute("""SELECT q.* FROM outbox q
             WHERE q.state='queued' AND q.next<=?
             AND NOT EXISTS (SELECT 1 FROM outbox prior WHERE prior.peer=q.peer
-                AND prior.state='queued' AND prior.rowid<q.rowid)
+                AND prior.state IN ('queued','paused') AND prior.rowid<q.rowid)
             """+excluded+' ORDER BY q.next,q.rowid LIMIT 1',(now,*excluded_peers)).fetchone()
         if row is not None:
             active.add(row['peer'])
@@ -225,12 +232,16 @@ def _deliver_claimed(node,row):
             result=Client(node,row['peer']).request(row['op'],**decode(row['args'].encode()))
             if result.get('id')!=row['id']:raise Invalid('delivery acknowledgement mismatch')
             state='delivered';error=''
-        except Exception as exc:state='queued';error=type(exc).__name__+': '+str(exc)[:150]
+        except Exception as exc:
+            from .message_work import WorkBudget
+            state='paused' if isinstance(exc,WorkBudget) else 'queued'
+            error=type(exc).__name__+': '+str(exc)[:150]
         with node.transaction():
             node.db.execute('UPDATE outbox SET state=?,attempts=attempts+1,next=?,error=? WHERE id=?',(state,int(time.time())+min(300,2**min(row['attempts']+1,9)),error,row['id']))
             if state=='delivered':
                 if not hasattr(node,'_delivery_ready'):node._delivery_ready={}
-                node._delivery_ready[row['peer']]=time.monotonic()+DELIVERY_PEER_INTERVAL
+                paid=node.db.execute('SELECT 1 FROM message_work_out WHERE id=?',(row['id'],)).fetchone()
+                node._delivery_ready[row['peer']]=time.monotonic()+(1.0 if paid else DELIVERY_PEER_INTERVAL)
     finally:
         with node.lock:
             node._delivery_peers.discard(row['peer'])

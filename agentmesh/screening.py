@@ -14,7 +14,7 @@ import re
 import unicodedata
 from urllib.parse import unquote
 
-VERSION = '1'
+VERSION = '2'
 MAX_CHARS = 512 * 1024
 MAX_TOTAL = 2 * 1024 * 1024
 MAX_VIEWS = 128
@@ -135,7 +135,7 @@ def _decoded(text):
             yield value
 
 
-def scan(text):
+def scan(text, *, _budget=None):
     """Return fixed reason codes only: no excerpts or attacker-chosen labels."""
     if not isinstance(text, str):raise TypeError('screening expects text')
     reasons = set(); complete = True; high = False
@@ -146,6 +146,10 @@ def scan(text):
         if value in seen:continue
         if len(value) > MAX_CHARS or total + len(value) > MAX_TOTAL or len(seen) >= MAX_VIEWS:
             complete = False; break
+        if _budget is not None:
+            if _budget['chars']+len(value)>MAX_TOTAL or _budget['views']>=MAX_VIEWS:
+                complete=False; break
+            _budget['chars']+=len(value); _budget['views']+=1
         seen.add(value); total += len(value)
         found = _indicators(value)
         reasons.update(found); high |= bool(found)
@@ -188,25 +192,35 @@ objects, metadata or snippets. A blocked result is not an operation failure:
 receipt semantics and the original ok flag remain authoritative.
 """
     try:
-        strings = []; stack = [(response.get('result', response.get('error')), 0)]
-        size = 0; count = 0
-        while stack:
-            value, depth = stack.pop(); count += 1
-            if depth > 32 or count > 65536:raise ValueError('scan budget')
-            if isinstance(value, str):
-                size += len(value)
-                if size > MAX_CHARS:raise ValueError('scan budget')
-                strings.append(value)
-            elif isinstance(value, dict):
-                for key in sorted(value, reverse=True):
-                    stack.extend(((key, depth + 1), (value[key], depth + 1)))
-            elif isinstance(value, (list, tuple)):
-                stack.extend((item, depth + 1) for item in reversed(value))
-        report = scan('\n'.join(strings))
+        report = scan(_text(response.get('result', response.get('error'))))
     except Exception:
-        # Never interpolate an exception that could contain attacker text.
-        report = {'version': VERSION, 'complete': False, 'decision': 'withhold',
-                  'findings': ['scan_unavailable'], 'untrusted_data': True}
+        report = _unavailable()
+    return _finish(response, report)
+
+
+def _text(value):
+    strings = []; stack = [(value, 0)]; size = 0; count = 0
+    while stack:
+        value, depth = stack.pop(); count += 1
+        if depth > 32 or count > 65536:raise ValueError('scan budget')
+        if isinstance(value, str):
+            size += len(value)
+            if size > MAX_CHARS:raise ValueError('scan budget')
+            strings.append(value)
+        elif isinstance(value, dict):
+            for key in sorted(value, reverse=True):
+                stack.extend(((key, depth + 1), (value[key], depth + 1)))
+        elif isinstance(value, (list, tuple)):
+            stack.extend((item, depth + 1) for item in reversed(value))
+    return '\n'.join(strings)
+
+
+def _unavailable():
+    return {'version': VERSION, 'complete': False, 'decision': 'withhold',
+            'findings': ['scan_unavailable'], 'untrusted_data': True}
+
+
+def _finish(response, report):
     result = dict(response)
     result['content_screening'] = report
     if report['decision'] == 'withhold':
@@ -228,3 +242,39 @@ receipt semantics and the original ok flag remain authoritative.
             if original.get('receipt_state') == 'completed':
                 result['error'].update(receipt_state='completed', same_key_action='retrieve_receipt')
     return result
+
+
+def screen_page(response, field):
+    """Isolate offending entries, then screen retained content together.
+
+Only local inbox/thread tools select this path. Aggregate screening still catches
+instructions assembled across entries or copied into page metadata. All scans
+share interpretation/character limits; incomplete work withholds the whole page.
+"""
+    if not response.get('ok'):return screen_response(response)
+    try:
+        page=response['result']; _text(page)  # Bound the original page before work.
+        if not isinstance(page,dict) or not isinstance(page.get(field),list) or len(page[field])>100:
+            return screen_response(response)
+        budget={'chars':0,'views':0}; entries=[]; withheld=0
+        for entry in page[field]:
+            report=scan(_text(entry),_budget=budget)
+            if not report['complete']:return _finish(response,report)
+            if report['decision']=='withhold':
+                replacement={'withheld':True,'untrusted_data':True,'content_screening':report}
+                if isinstance(entry,dict):
+                    cursor=entry.get('cursor')
+                    if type(cursor) is int and 0<=cursor<2**63:replacement['cursor']=cursor
+                    obj=entry.get('message',entry.get('object'))
+                    oid=obj.get('id') if isinstance(obj,dict) else None
+                    if isinstance(oid,str) and re.fullmatch('[0-9a-f]{64}',oid):replacement['id']=oid
+                entries.append(replacement);withheld+=1
+            else:entries.append(entry)
+        retained={**page,field:entries}
+        report=scan(_text(retained),_budget=budget)
+        if report['decision']=='withhold':return _finish(response,report)
+        if withheld:
+            report.update(decision='partial',withheld_items=withheld,scope='retained_page_content')
+        return {**response,'result':retained,'content_screening':report}
+    except Exception:
+        return _finish(response,_unavailable())

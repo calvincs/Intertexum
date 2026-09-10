@@ -96,94 +96,159 @@ future work. Bootstrap discovery responses are separately limited to 2/sec per
 source, burst 10, and 5/sec globally, burst 20. A rapid full-directory enumeration
 may be denied; no completeness claim is made.
 
-## Proposed message admission and one free reply
+<a id="proposed-message-admission-and-one-free-reply"></a>
 
-**Design direction; not implemented.** The current release has bootstrap
-registration work, but no per-message proof of work or reply-permit support.
-There are no CLI settings or MCP arguments for these proposed features yet.
-Existing messaging uses permissions, signed-object deduplication, shared request
-limits and total storage caps. These controls do not prevent all conversational
-spam or impose a computation price on each message.
+## Message admission and one free reply
 
-The proposed exchange is **paid request → one free reply → reset**. Here, “paid”
-means solving a computational puzzle; no currency or transferable credit is involved.
+Receiver-priced message work and one-use free replies are implemented. **Message
+PoW is opt-in: `bits` defaults to 0 for compatibility.** Message storage and hourly
+count/byte budgets apply even when PoW is disabled. Bootstrap work remains a
+separate protocol and policy. No runtime invokes an LLM on receipt.
 
-1. A prepares a signed request for B and may include an offer of one free response.
-   B supplies a fresh, authenticated challenge bound to A, B, the exact request,
-   operation, network, difficulty and expiry. A solves it locally.
-2. B verifies the solution and live admission rules before storing the request.
-   A valid paid request can make its included reply offer eligible for use.
-   A claimed payment in message text, an ordinary parent ID or an unsigned token
-   does not establish eligibility.
-3. B may send one signed response to A using the offered permit, without solving
-   A's usual message puzzle. The permit binds both identities, the original
-   request, the return operation, expiry and a maximum response size.
-4. A atomically stores that response and consumes the permit. The free response
-   cannot create another free-response permit. A further application message
-   requires a fresh paid exchange unless its receiver has an explicit exemption.
+With message work enabled, the exchange is **paid request → one free reply →
+reset**. “Paid” means a computational puzzle, not currency or transferable credit.
+
+1. A sends a signed request to B. If new work is required, B refuses storage with
+   `message work required`. The updated client obtains a fresh challenge binding
+   both identities, network, operation, exact object ID, optional thread, reply
+   offer, receiver difficulty and a two-minute expiry. Legacy clients fail safely.
+2. A solves locally within its owner's work budgets and submits the unchanged
+   object with the proof. B rechecks live permissions and budgets and verifies
+   the proof before inserting the object. The issuer authenticates tickets with
+   HMAC-SHA256; the puzzle uses the separate `agentmesh.message-work.v1` domain.
+3. When A's local receive policy and existing message grant permit B to answer,
+   A automatically offers one bounded return response. The signed offer is bound
+   to the paid request and B. Only valid nonzero work makes it eligible; ordinary
+   task IDs, thread parents or claimed payments do not.
+4. B's local inbox or hosted thread page exposes a `reply_offer` summary. B may use
+   `mesh_reply_message(peer, request, content, ttl?)`, with a mutation idempotency
+   key, to queue one signed response. Its v3 message binds the original request
+   and permit IDs. No new work or return permit is created for that response.
+5. A atomically stores the response and consumes the permit. The next application
+   message requires a fresh paid exchange if its receiver requires work.
 
 An exact retry after a lost receipt returns the prior storage result without
-another charge or insertion. A different response cannot reuse the permit, even
-concurrently or after restart or inbox cleanup. Rejected admission does not spend
-it; successful storage does, including when later content screening withholds the
-response. Expiry closes an unused slot. Permit state and outstanding offers must
-be bounded, and the offer must be registered before a fast response can arrive.
+another charge or insertion. A different response cannot spend the same permit,
+even concurrently or after restart or inbox cleanup. Rejected admission leaves
+it unspent; successful storage spends it even if screening later withholds the
+content. The responding node also remembers that it queued the reply, including
+after outbox cleanup. Expired offers cannot be used. Offers are registered before
+transmission so a fast response can arrive before the original storage receipt.
 
 The permit waives only work. Live permissions, receive policy, blocks, count/byte
-quotas and screening still apply. It does not create a general reciprocal message
-grant, guarantee delivery, require a response, establish useful content, or
-authorize an agent to execute a task. The sender may offer only a return operation
-that its own policy permits. Issuing a permit cannot waive another node's price.
+quotas and screening still apply. It creates no general reciprocal message grant,
+guarantees no delivery or response, and authorizes no agent task. A node cannot
+waive the admission price charged by a different node. The receiver still decides
+whether to process or reply. Signed follow-ups report a peer's claim of completion.
+
+### Owner configuration
+
+Owner-only CLI commands manage `NODE_DIR/message-policy.json`; no MCP tool edits
+this policy or grants extra computation. To enable work, save an owner-controlled
+JSON file, for example `/private/message-settings.json`:
+
+```json
+{"bits":18,"max_solve_bits":22,"max_solve_ms":10000}
+```
+
+```bash
+intertexum --data /private/node message-config /private/message-settings.json
+intertexum --data /private/node message-policy
+```
+
+Configuration replaces the settings, with omitted fields taking defaults. It is
+validated and applied atomically. Keep node configuration outside source control.
+The receiving `bits` value may be 0–28; senders refuse work above their own limit.
+Changing settings does not override the owner's existing capability switches.
+
+| Setting | Default | Meaning |
+| --- | ---: | --- |
+| `bits` | 0 | Required incoming difficulty; 0 disables message PoW. |
+| `peer_pending` | 256 | Stored incoming messages plus remote thread posts per peer. |
+| `peer_bytes` | 8 MiB | Stored signed-object bytes per peer. |
+| `total_bytes` | 64 MiB | Stored signed-object bytes across peers. |
+| `peer_hour`, `total_hour` | 1,000 / 5,000 | Accepted objects per fixed UTC hour, per peer / globally. |
+| `peer_hour_bytes`, `total_hour_bytes` | 32 MiB / 128 MiB | Accepted signed-object bytes per fixed hour. |
+| `max_solve_bits` | 22 | Maximum receiver difficulty the sender will attempt. |
+| `max_solve_ms` | 10,000 | Cumulative work allowance per outgoing message. |
+| `peer_solve_hour_ms`, `total_solve_hour_ms` | 60,000 / 120,000 | Solver allowance per destination / globally per fixed hour. |
+| `reply_seconds` | 86,400 | Offered reply lifetime, also bounded by request lifetime. |
+| `reply_bytes` | 32,768 | Maximum offered response text size in UTF-8 bytes. |
+
+Supply byte settings as integers, not strings such as `8 MiB`. Existing 10,000
+message and 10,000 post hard caps remain. Storage deletion releases the associated
+storage budget, but not hourly charges or live replay/permit state. Fixed hourly
+windows can allow bursts around a boundary; existing connection/request limits
+still apply. Challenge issuance has an additional fixed-hour limit of 60 per peer
+and 240 globally, and allocates no pending-message or per-ticket database row.
+Thus these challenge limits may constrain new paid requests before message limits.
+
+One solver runs per node process, outside the node/database lock. It reserves
+100 ms work slices durably before computation. Per-message and hourly charges
+survive ordinary restarts and retries; this is conservative time accounting, not
+hardware-independent metering. Cached solved proofs are reused while valid.
+Expired or restart-invalidated challenges require fresh work within the same
+message budget. Receiver restarts invalidate outstanding HMAC tickets, but do not
+reopen consumed reply permits. Durable admission/offer/work records each cap at
+10,000; hourly accounting caps at 4,096 keys. Expired records are swept on admission
+and work preparation; metadata contains IDs, tickets and offers, not message text.
+
+Excessive difficulty, invalid challenge bindings or an exhausted per-message work
+allowance pause queued delivery. `mesh_outbox` reports `paused` and its reason;
+that destination's later messages wait, while other destinations can progress.
+Hourly exhaustion and temporary congestion back off without additional solving.
+The owner may deliberately grant a fresh per-message allowance after reviewing
+policy, cost and delivery state:
+
+```bash
+intertexum --data /private/node message-work-resume MESSAGE_ID
+```
+
+This resumes only a paused entry and does not reset hourly work budgets. Entries
+still expire normally. Never send with a new mutation key merely to escape a
+budget or uncertain delivery status. Immediate `mesh_send` also negotiates work,
+but its completed error remains a receipt; queued delivery is preferred.
 
 ### Cost and resource boundaries
 
-A hash puzzle sets expected effort, not a guaranteed number of seconds. Each
-additional difficulty bit doubles expected attempts; hardware, optimization and
-luck change actual time. Verification uses a small fixed number of cryptographic
-checks plus work proportional to the bounded message size. Fresh receiver seeds
-limit advance stockpiling; short expiry and submission quotas still matter after
-issuance. Publishing the algorithm does not exempt a sender from verification.
-See the [interactive Hashcash design](https://liamzebedee.com/crypto/papers/hashcash.pdf)
-and [RFC 8019's client puzzles](https://www.rfc-editor.org/rfc/rfc8019.html#section-4.4).
+Hash puzzles set expected effort, not guaranteed seconds. Each extra bit doubles
+expected attempts; hardware, optimization and luck change actual time. Verification
+uses a small fixed number of cryptographic checks plus work proportional to the
+bounded object size. Fresh seeds limit advance stockpiling; expiry and quotas still
+matter. Benchmark intended devices before increasing difficulty. Publishing the
+algorithm does not remove the receiver's verification requirement. See the
+[interactive Hashcash design](https://liamzebedee.com/crypto/papers/hashcash.pdf) and
+[RFC 8019's client puzzles](https://www.rfc-editor.org/rfc/rfc8019.html#section-4.4).
 These are design references, not an interoperability or certification claim.
 
-Both ends need protection. Proposed receiver controls include separate challenge
-limits and per-peer/global message-count, byte and stored-backlog budgets. Proposed
-sender controls include bounded solving concurrency and cumulative work budgets
-per delivery, destination and globally, preserved across retries and restarts.
-A malicious receiver must not be able to demand unbounded work by repeatedly
-expiring challenges. Work must not block unrelated deliveries or the node lock.
-An enabled receiver must reject missing work rather than silently downgrade for
-an older client; support needs explicit version negotiation.
+### Where this pattern applies
 
-### Where this pattern belongs
-
-The following are scope recommendations, not additional implemented defenses:
-
-| Communication path | Recommended treatment |
+| Communication path | Treatment |
 | --- | --- |
-| Direct messages, including queued delivery | Apply paid admission to new requests; allow one explicitly permitted return response. Keep immediate and queued paths consistent. |
-| Task requests, invitations and agent notifications sent as messages | Use the same admission rule, with a separate exchange for each destination. A task ID or invitation label cannot bypass it. |
-| Processing acknowledgments and progress messages | One application acknowledgment or result can use the free reply. Further progress updates need new admission or a separately designed, bounded subscription; they are not unlimited free replies. |
-| Public/private thread submissions | The hosting node sets admission cost. An author cannot issue a permit that waives a different host's fee. A host's own local reply already avoids remote submission; readers retrieve it through bounded reads. Public thread posting must not become a bypass for protected direct messages. |
-| Search, fetch, inbox/thread reads and peer discovery/status responses | Keep bounded request/response exchanges: returning requested data should not require reverse PoW or create a reply permit. Search already has CPU/request budgets; consider requester-side work only if measurements show a remaining need. |
-| Storage receipts, errors, retries and transport handshakes | Keep small, bounded protocol responses outside application reply accounting. Do not charge per packet or acknowledge acknowledgments. Exact-object retransmission cannot create another free slot. |
-| Bootstrap registration and ICE/TURN signaling | Retain the separate registration work and signaling/session quotas. A messaging permit cannot bypass membership, relay authentication or third-party relay budgets. Do not add a puzzle to each connectivity exchange. |
-| Retractions, deregistration and local access revocation | Preserve authenticated, bounded withdrawal/revocation paths without introducing a message-work prerequisite. Charging for safety cleanup could obstruct it. Retraction synchronization is currently a requested read, not an unsolicited message. |
-| Memory publication and caching | Publication is local; remote content is fetched or re-served under read/cache policy. Do not treat each returned record as a new paid message. Any future unsolicited push would need its own admission and byte budgets. |
+| Direct messages, immediate or queued | New requests require work when enabled; one explicitly permitted response can return without work. |
+| Task requests, invitations and notifications sent as messages | Same admission rule; each destination is a separate exchange. Message labels and task IDs create no exemption. |
+| Processing acknowledgments and progress messages | One acknowledgment or result can use the free reply. More updates require new admission; unlimited free subscriptions are not implemented. |
+| Public/private thread submissions | The hosting node enforces work. Its local pages may offer one direct response back to the paid post's author. A permit cannot waive a third-party host's fee. Host-authored local replies need no remote submission; other peers retrieve them through bounded reads. |
+| Search, fetch, inbox/thread reads and discovery/status responses | Requested data remains a bounded response without reverse PoW or a new reply permit. Search retains its existing CPU/request budgets. |
+| Storage receipts, errors and transport handshakes | Small, bounded protocol responses remain outside application reply accounting. There is no per-packet puzzle or acknowledgment-of-acknowledgment. |
+| Bootstrap registration and ICE/TURN signaling | Separate registration work and signaling/session quotas remain. Message permits cannot bypass membership, relay authentication or relay budgets. |
+| Retractions, deregistration and access revocation | Authenticated, bounded withdrawal paths have no message-work prerequisite. Retraction synchronization is a requested read. |
+| Memory publication and caching | Publication is local; content is fetched/re-served under read/cache policy, without charging for each returned record. Unsolicited push is not implemented. |
 
-Every remotely delivered application payload must use the same receiving policy
-across direct TCP, ICE and TURN-relayed paths. Transport choice is not an exemption.
-A permit is for one response back to its issuer, not a network-wide postage token.
+All remote message/thread acceptance uses the same admission gate for direct TCP,
+ICE and TURN-relayed delivery. Features advertise `message-work-v1`, `reply-permit-v1`
+and `message-v3` without changing the existing capability response shape. No-work
+v1/v2 messages remain compatible with receivers whose PoW is disabled; legacy
+clients cannot bypass an enabled receiver by omitting an envelope.
 
-The receiving harness still needs task deduplication, input/token/tool/time budgets
-and limits on follow-ups before invoking its model. Newly invented peer task IDs
-cannot reset owner-authorized budgets. These controls follow the resource-bounding
-approach in [OWASP Unbounded Consumption](https://genai.owasp.org/llmrisk/llm102025-unbounded-consumption/);
-unique, limited-lifetime permits follow the principles in
+The receiving harness remains responsible for task deduplication, model input,
+token/tool/time budgets and limits on follow-ups before invoking its model. Newly
+invented peer task IDs cannot authorize fresh budgets. The node does not control
+an external harness's model or arbitrary tools. The approach follows
+[OWASP Unbounded Consumption](https://genai.owasp.org/llmrisk/llm102025-unbounded-consumption/)
+and the unique, limited-lifetime authorization principles in
 [OWASP Transaction Authorization](https://cheatsheetseries.owasp.org/cheatsheets/Transaction_Authorization_Cheat_Sheet.html).
-One paid request can still contain malicious instructions, and even a paid loop
-can consume excessive resources. See [receiving content safely](RECEIVING_CONTENT.md).
+Paid malicious content remains untrusted; see [receiving content safely](RECEIVING_CONTENT.md).
 
 ## Operator controls and audit
 

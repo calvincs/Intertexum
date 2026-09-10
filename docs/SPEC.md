@@ -83,6 +83,15 @@ and deduplicate at the recipient even after inbox acknowledgment. Up to four
 destinations progress concurrently with paced FIFO delivery within each peer. Acknowledgment
 means stored, not processed. Thread replies can also queue for their host.
 
+Receiver-enforced message work is configurable and defaults to disabled for
+compatibility. Message-count and byte budgets apply independently. Paid requests
+may offer one signed return permit; a v3 response binds its request and permit IDs
+and consumes it atomically with insertion. Free replies create no new permits.
+Proofs use a separate message-work domain, receiver-authenticated expiring tickets,
+and durable sender computation budgets. Immediate/queued and TCP/ICE/relay paths
+share admission. See [message admission](DEFENSE.md#message-admission-and-one-free-reply)
+for the wire scope, configuration, default limits and failure semantics.
+
 These are encrypted transport channels, not MLS group encryption or a replicated
 consensus history. Authorized hosts/participants can see and retain plaintext.
 See [OPEN_MESH.md](OPEN_MESH.md) for the complete tool and failure semantics.

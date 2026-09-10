@@ -82,6 +82,11 @@ def parser():
     send.add_argument("--peer", required=True)
     send.add_argument("--text", required=True)
     sub.add_parser("inbox")
+    sub.add_parser('message-policy',help='show message admission and sender work limits')
+    mp=sub.add_parser('message-config',help='owner: set message policy from a JSON file')
+    mp.add_argument('file',type=Path)
+    mr=sub.add_parser('message-work-resume',help='owner: reset a paused delivery work budget')
+    mr.add_argument('id')
     seed = sub.add_parser('bootstrap-serve', help='run a separate discovery listener')
     seed.add_argument('--host', default='127.0.0.1')
     seed.add_argument('--port', type=int, default=7444)
@@ -167,6 +172,11 @@ def run(args):
             if not policy(node)['network']:raise Denied('capability_disabled:network')
             (node.directory/'connectivity-suspended').unlink(missing_ok=True)
             return {'resumed':True}
+        if cmd in ('message-policy','message-config','message-work-resume'):
+            from .message_work import config,configure,resume
+            if cmd=='message-policy':return config(node)
+            if cmd=='message-config':return configure(node,decode(args.file.read_bytes()))
+            return resume(node,args.id)
         if cmd=='status':
             from .onboarding import status
             return status(node)

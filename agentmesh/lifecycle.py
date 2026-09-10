@@ -35,6 +35,9 @@ def message_page(node,*,after=0,limit=50):
         items=[];size=0;cursor=after
         for row in rows[:limit]:
             entry={'message':decode(row['wire'].encode()),'cursor':row['seq'],'untrusted_data':True}
+            from .message_work import reply_info
+            offered=reply_info(node,entry['message']['id'])
+            if offered:entry['reply_offer']=offered
             cost=len(canonical(entry))
             if size+cost>PAGE_BYTES:break
             items.append(entry);size+=cost;cursor=row['seq']
