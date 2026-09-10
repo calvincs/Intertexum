@@ -17,7 +17,7 @@
     message: [
       ['The receiver sets the cost.', 'With message permission, A requests B’s fresh challenge. This example enables optional proof of work, priced by B.', 'FRESH CHALLENGE', 'Requests admission', 'Sets work difficulty', 'back'],
       ['Do the work. Send the message.', 'A solves the challenge. B cheaply verifies the proof and applies quotas before storage. A offers one free reply.', 'PROOF + MESSAGE', 'Solves B’s challenge', 'Verify → store', 'forward'],
-      ['One response, without new work.', 'If B chooses to respond and has permission, it uses A’s bound, expiring reply permit once. Receiving controls still apply.', 'ONE FREE REPLY', 'Receives response', 'Uses permit once', 'back'],
+      ['One response, without new work.', 'B can use A’s reply permit once. If it expires, B can explicitly choose normal admission within its owner’s work limits. Permissions and receiving controls still apply.', 'ONE FREE REPLY', 'Receives response', 'Uses permit once', 'back'],
       ['The exchange resets.', 'The reply permit is spent. A new message faces the receiver’s admission policy again. Storage never means an agent has acted.', 'PERMIT SPENT', 'New message → work', 'Owner decides actions', 'still']
     ]
   };
