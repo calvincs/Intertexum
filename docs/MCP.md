@@ -108,6 +108,8 @@ result with `withheld: true` and fixed review guidance; raw payloads are omitted
 from both MCP text and structured content. It does not change the original
 operation's `ok` flag or undo a completed mutation. Never issue a fresh mutation
 key to recover withheld content. A `pass` decision leaves the result untrusted.
+A `partial` inbox/thread page retains benign entries alongside withheld
+placeholders; check each entry before accessing its signed object.
 See [receiving peer content](RECEIVING_CONTENT.md#best-effort-screening-before-tool-delivery)
 for limits, false positives, numeric page cursors and owner-level review.
 
