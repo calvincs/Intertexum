@@ -24,7 +24,7 @@ async def client(directory,*args,message_handler=None):
     async with stdio_client(params) as (reader,writer):
         async with ClientSession(reader,writer,message_handler=message_handler) as session:
             init=await session.initialize()
-            assert init.serverInfo.name=='agentmesh'
+            assert init.server_info.name=='agentmesh'
             yield session
 
 
@@ -43,39 +43,39 @@ def test_official_stdio_client_tools_resources_policy_and_retry(tmp_path):
     async def scenario():
         changed=asyncio.Event()
         async def notifications(message):
-            if getattr(getattr(message,'root',None),'method',None)=='notifications/tools/list_changed':changed.set()
+            if getattr(message,'method',None)=='notifications/tools/list_changed':changed.set()
         async with client(directory,message_handler=notifications) as session:
             tools=(await session.list_tools()).tools
             names={x.name for x in tools}
             assert 'mesh_write' in names and 'mesh_send' not in names
             assert not any('admin' in x or 'trust' in x for x in names)
             write=next(t for t in tools if t.name=='mesh_write')
-            assert 'idempotency_key' in write.inputSchema['required']
+            assert 'idempotency_key' in write.input_schema['required']
             assert (await session.list_resources()).resources
             policy=await session.read_resource('agentmesh://policy')
             assert json.loads(policy.contents[0].text)['network'] is False
             instructions=await session.read_resource('agentmesh://instructions')
             assert instructions.contents[0].text.startswith('# Intertexum:')
             missing=await session.call_tool('mesh_write',{'text':'No key.'})
-            assert missing.isError and missing.structuredContent['error']['code']=='invalid_request'
+            assert missing.is_error and missing.structured_content['error']['code']=='invalid_request'
             first=await session.call_tool('mesh_write',{'text':'MCP remembers across sessions.','idempotency_key':'once'})
-            assert not first.isError,first
-            result=first.structuredContent
+            assert not first.is_error,first
+            result=first.structured_content
             again=await session.call_tool('mesh_write',{'text':'MCP remembers across sessions.','idempotency_key':'once'})
-            assert again.structuredContent==result
+            assert again.structured_content==result
             conflict=await session.call_tool('mesh_write',{'text':'Different payload.','idempotency_key':'once'})
-            assert conflict.isError
+            assert conflict.is_error
             private_write(directory/'policy.json',{'network':False,'write':False})
             await asyncio.wait_for(changed.wait(),6)
             assert 'mesh_write' not in {x.name for x in (await session.list_tools()).tools}
             denied=await session.call_tool('mesh_write',{'text':'No bypass.','idempotency_key':'blocked'})
-            assert denied.isError and denied.structuredContent['error']['code']=='denied'
+            assert denied.is_error and denied.structured_content['error']['code']=='denied'
         private_write(directory/'policy.json',{'network':False})
         async with client(directory) as session:
             resumed=await session.call_tool('mesh_write',{'text':'MCP remembers across sessions.','idempotency_key':'once'})
-            assert resumed.structuredContent==result
+            assert resumed.structured_content==result
             status=await session.call_tool('mesh_status',{})
-            assert status.structuredContent['result']['readiness']=='disabled'
+            assert status.structured_content['result']['readiness']=='disabled'
     asyncio.run(scenario())
 
 
@@ -94,7 +94,7 @@ def test_daemon_survives_mcp_disconnect_and_receives_peer_message(tmp_path):
         async def first():
             async with client(directory,'--attach','--socket',str(target)) as session:
                 result=await session.call_tool('mesh_status',{})
-                assert not result.isError
+                assert not result.is_error
         asyncio.run(first())
         assert daemon.poll() is None
         # A peer can deliver while no MCP client exists. No direct DB injection
@@ -109,8 +109,8 @@ def test_daemon_survives_mcp_disconnect_and_receives_peer_message(tmp_path):
         async def second():
             async with client(directory,'--attach','--socket',str(target)) as session:
                 result=await session.call_tool('mesh_inbox',{})
-                assert not result.isError
-                assert len(result.structuredContent['result']['messages'])==1
+                assert not result.is_error
+                assert len(result.structured_content['result']['messages'])==1
         asyncio.run(second())
         assert daemon.poll() is None
         # Embedded runtimes cannot take over a daemon's identity/listener.
@@ -166,23 +166,57 @@ def test_mcp_thread_tools_and_large_inbox_pages(tmp_path):
     async def scenario():
         async with client(directory) as session:
             created=await session.call_tool('mesh_thread_create',{'content':'Coordinate safely','members':['@public'],'idempotency_key':'e0:root'})
-            assert not created.isError
-            root=created.structuredContent['result']['id']
+            assert not created.is_error
+            root=created.structured_content['result']['id']
             status=await session.call_tool('mesh_status',{})
-            host=status.structuredContent['result']['id']
+            host=status.structured_content['result']['id']
             reply=await session.call_tool('mesh_thread_reply',{'peer':host,'thread':root,'content':'A signed response','idempotency_key':'e0:reply'})
-            assert not reply.isError
+            assert not reply.is_error
             page=await session.call_tool('mesh_thread_read',{'thread':root})
-            assert len(page.structuredContent['result']['items'])==1
+            assert len(page.structured_content['result']['items'])==1
             after=0;seen=0;last=0
             while True:
                 result=await session.call_tool('mesh_inbox',{'after':after,'limit':100})
-                assert not result.isError
-                page=result.structuredContent['result'];seen+=len(page['messages'])
+                assert not result.is_error
+                page=result.structured_content['result'];seen+=len(page['messages'])
                 last=page['messages'][-1]['cursor']
                 if page['next'] is None:break
                 after=page['next']
             assert seen==70
             ack=await session.call_tool('mesh_maintenance',{'ack_before':last,'idempotency_key':'e0:ack'})
-            assert not ack.isError and ack.structuredContent['result']['messages_acknowledged']==70
+            assert not ack.is_error and ack.structured_content['result']['messages_acknowledged']==70
     asyncio.run(scenario())
+
+
+def test_legacy_wire_client_keeps_camel_case_results(tmp_path):
+    """Older harnesses must still work after the Python SDK's snake_case migration."""
+    import select
+    directory,_=prepared(tmp_path)
+    process=subprocess.Popen([sys.executable,'-m','agentmesh','--data',str(directory),'mcp'],
+        stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    def send(message):
+        process.stdin.write(json.dumps({'jsonrpc':'2.0',**message})+'\n');process.stdin.flush()
+    def receive():
+        assert select.select([process.stdout],[],[],10)[0], 'MCP response timed out'
+        return json.loads(process.stdout.readline())
+    try:
+        send({'id':1,'method':'initialize','params':{'protocolVersion':'2025-11-25',
+            'capabilities':{},'clientInfo':{'name':'legacy-wire-test','version':'1'}}})
+        initialized=receive()['result']
+        assert initialized['protocolVersion']=='2025-11-25'
+        assert initialized['serverInfo']['name']=='agentmesh'
+        send({'method':'notifications/initialized'})
+        send({'id':2,'method':'tools/list'})
+        write=next(t for t in receive()['result']['tools'] if t['name']=='mesh_write')
+        assert 'idempotency_key' in write['inputSchema']['required']
+        assert write['annotations']['readOnlyHint'] is False
+        send({'id':3,'method':'tools/call','params':{'name':'mesh_write','arguments':{'text':'Missing key'}}})
+        result=receive()['result']
+        assert result['isError'] is True
+        assert result['structuredContent']['error']['code']=='invalid_request'
+        send({'id':4,'method':'resources/read','params':{'uri':'agentmesh://policy'}})
+        resource=receive()['result']['contents'][0]
+        assert resource['mimeType']=='application/json'
+        assert json.loads(resource['text'])['network'] is False
+    finally:
+        process.terminate();process.communicate(timeout=15)
