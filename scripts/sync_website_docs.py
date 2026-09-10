@@ -10,12 +10,20 @@ from urllib.parse import quote, unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC = ('llm.txt', 'llms.txt', 'DISCLAIMER.md', 'LICENSE', 'NOTICE', 'SECURITY.md')
+# Maintainer workflows stay in the source repository, never on the user site.
+INTERNAL_DOCS = ('docs/RELEASING.md', 'docs/WEBSITE.md')
+PUBLIC_DOCS = (
+    'AGENT_SETUP', 'BOOTSTRAP', 'CACHING', 'CONNECTIVITY', 'DEFENSE',
+    'EMBEDDINGS', 'ERASURE', 'GLOSSARY', 'MCP', 'OPEN_MESH',
+    'OPERATING_LIMITS', 'PEER_VIEWS', 'PRIVACY', 'RECEIVING_CONTENT',
+    'ROADMAP', 'SPEC', 'UNDERSTANDING', 'VALIDATION',
+)
 SOURCE_URL = 'https://github.com/calvincs/Intertexum/blob/main/'
 
 
 def snapshots(source=ROOT):
     source = Path(source).resolve()
-    names = list(PUBLIC) + sorted(p.relative_to(source).as_posix() for p in (source / 'docs').glob('*.md'))
+    names = list(PUBLIC) + ['docs/' + name + '.md' for name in PUBLIC_DOCS]
     published = set(names)
     result = {}
     for name in names:
@@ -58,6 +66,15 @@ def sync(website, *, check=False, source=ROOT):
             if not check:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(content)
+    for name in INTERNAL_DOCS:
+        for retired in (name, name.removesuffix('.md').lower() + '.html'):
+            target = website / retired
+            if target.is_symlink() or not target.resolve().is_relative_to(website):
+                raise ValueError('website target must not escape checkout: ' + retired)
+            if target.exists():
+                changed.append(retired)
+                if not check:
+                    target.unlink()
     return changed
 
 

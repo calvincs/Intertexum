@@ -49,21 +49,31 @@ def test_storage_helpers_do_not_commit_the_callers_transaction(mesh):
 
 
 def test_website_document_snapshot_detects_drift_and_excludes_source_state(tmp_path):
-    from scripts.sync_website_docs import PUBLIC, sync
+    from scripts.sync_website_docs import PUBLIC, PUBLIC_DOCS, sync
     source = tmp_path / 'source'
     website = tmp_path / 'website'
     source.mkdir(); website.mkdir(); (source / 'docs').mkdir()
     (website / 'index.html').write_text('<html></html>')
     for name in PUBLIC:
         (source / name).write_text('public instructions\n')
+    for name in PUBLIC_DOCS:
+        (source / 'docs' / (name + '.md')).write_text('public guide\n')
+    (source / 'docs' / 'WEBSITE.md').write_text('internal workflow')
+    (source / 'docs' / 'private-notes.md').write_text('internal notes')
+    (website / 'docs').mkdir()
+    (website / 'docs' / 'WEBSITE.md').write_text('old internal workflow')
+    (website / 'docs' / 'website.html').write_text('old internal page')
     (source / 'node.key').write_text('synthetic private state')
     (source / 'sample.py').write_text('source-only example')
-    (source / 'docs' / 'guide.md').write_text('[example](../sample.py)\n[license](../LICENSE)\n')
+    (source / 'docs' / 'AGENT_SETUP.md').write_text('[example](../sample.py)\n[license](../LICENSE)\n')
     assert sync(website, check=True, source=source)
     sync(website, source=source)
     assert not sync(website, check=True, source=source)
+    assert not (website / 'docs' / 'WEBSITE.md').exists()
+    assert not (website / 'docs' / 'website.html').exists()
+    assert not (website / 'docs' / 'private-notes.md').exists()
     assert not (website / 'node.key').exists()
     assert not (website / 'sample.py').exists()
-    assert '(https://github.com/calvincs/Intertexum/blob/main/sample.py)' in (website / 'docs' / 'guide.md').read_text()
-    (source / 'docs' / 'guide.md').write_text('current version\n')
-    assert sync(website, check=True, source=source) == ['docs/guide.md']
+    assert '(https://github.com/calvincs/Intertexum/blob/main/sample.py)' in (website / 'docs' / 'AGENT_SETUP.md').read_text()
+    (source / 'docs' / 'AGENT_SETUP.md').write_text('current version\n')
+    assert sync(website, check=True, source=source) == ['docs/AGENT_SETUP.md']

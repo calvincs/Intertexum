@@ -41,7 +41,8 @@ heading fragments and maps document links to their human-readable counterparts.
 `docs.css` and `docs.js` provide the shared theme, responsive reading layout,
 section navigation, filtering and optional code copying.
 
-Keep every original `.md` URL available. Each article links to its source, and
+Keep public `.md` URLs available. Maintainer-only release and website guides
+stay in the source repository and must not be published as Markdown or HTML. Each article links to its source, and
 `docs/index.md` is an additive source index for agents. `llm.txt`, `llms.txt` and
 the source fields in `agent.json` retain their original machine-readable targets.
 Every HTML page uses the same existing Google Analytics tag, `G-YKJ2WJNQBD`, in
@@ -59,7 +60,8 @@ Honor reduced motion and offer a keyboard-accessible animation toggle.
 
 ## Documentation snapshots
 
-Copy `llm.txt`, `llms.txt`, `docs/`, `DISCLAIMER.md`, `SECURITY.md`, `LICENSE` and `NOTICE` from
+Copy `llm.txt`, `llms.txt`, the explicitly allowlisted public docs,
+`DISCLAIMER.md`, `SECURITY.md`, `LICENSE` and `NOTICE` from
 main when publishing. Rewrite local source-only Markdown links to the actual
 GitHub repository; do not copy node state, invitations or development artifacts.
 Validate assets, fragments, JSON metadata, instruction parity and seed-name absence.
