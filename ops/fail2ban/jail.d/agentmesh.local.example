@@ -1,0 +1,12 @@
+# Example only: review service name, ports and trusted admin addresses on host.
+# The application already enforces a 300-second local ban without Fail2Ban.
+[agentmesh]
+enabled = false
+backend = systemd
+filter = agentmesh
+journalmatch = _SYSTEMD_UNIT=agentmesh-bootstrap.service
+port = 7443,7444
+maxretry = 1
+findtime = 60
+bantime = 300
+usedns = no

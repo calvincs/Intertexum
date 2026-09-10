@@ -1,0 +1,218 @@
+"""Signed, host-local threads and durable delivery. Remote text is always untrusted."""
+import time
+import uuid
+import threading
+from .crypto import Invalid,Denied,canonical,decode,sign,verify,certificate,public_id,valid_id
+from .records import text,audience
+
+DOMAIN='agentmesh.thread.v1'
+PAGE_BYTES=512*1024
+
+
+def schema(node):
+    node.db.executescript('''CREATE TABLE IF NOT EXISTS threads(id TEXT PRIMARY KEY,wire TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS posts(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE,thread TEXT,received INTEGER,wire TEXT);
+      CREATE TABLE IF NOT EXISTS outbox(id TEXT PRIMARY KEY,peer TEXT,op TEXT,args TEXT,state TEXT,attempts INTEGER,next INTEGER,expires INTEGER,error TEXT);
+      CREATE TABLE IF NOT EXISTS received_ids(id TEXT PRIMARY KEY,expires INTEGER);
+    ''')
+    node.db.execute("INSERT OR IGNORE INTO received_ids SELECT id,coalesce(json_extract(wire,'$.body.expires'),0) FROM messages")
+
+
+def _body(node,kind,content,**fields):
+    text(content)
+    return sign(node.identity.key,DOMAIN,{'version':1,'kind':kind,'origin':node.id,
+        'certificate':node.identity.pem,'text':content,'created_ms':int(time.time()*1000),'nonce':uuid.uuid4().hex,**fields})
+
+
+def checked(obj):
+    try:
+        b=obj['body'];key=certificate(b['certificate']).public_key()
+        b=verify(obj,key,DOMAIN)
+        if b['origin']!=public_id(key) or type(b['version']) is not int or b['version']!=1:raise Invalid('thread identity mismatch')
+        if type(b['created_ms']) is not int or b['created_ms']<0 or b['created_ms']>int(time.time()*1000)+300000:raise Invalid('invalid thread timestamp')
+        if not isinstance(b['nonce'],str) or len(b['nonce'])!=32:raise Invalid('invalid thread nonce')
+        text(b['text'])
+        base={'version','kind','origin','certificate','text','created_ms','nonce'}
+        if b['kind']=='root':
+            if set(b)!=base|{'audience'}:raise Invalid('invalid root fields')
+            audience(b['audience'])
+            if b['audience']==['*']:raise Invalid('threads require @public or named members')
+        elif b['kind']=='reply':
+            if set(b)!=base|{'thread','parent'} or not valid_id(b['thread']) or not valid_id(b['parent']):raise Invalid('invalid reply fields')
+        else:raise Invalid('unknown thread kind')
+        return b
+    except (KeyError,TypeError) as exc:raise Invalid('invalid thread object') from exc
+
+
+def _root(node,tid):
+    row=node.db.execute('SELECT wire FROM threads WHERE id=?',(tid,)).fetchone()
+    if not row:raise Denied('thread unavailable')
+    return decode(row[0].encode())
+
+
+def _access(node,root,requester):
+    body=root['body']
+    if requester==node.id:return
+    node.require(requester,'read')
+    if body['audience']!=['@public']:
+        if requester not in body['audience'] or 'read' not in node.peer(requester)['permissions']:raise Denied('thread unavailable')
+
+
+def create(node,content,members):
+    node.capability('threads');node.capability('publish')
+    if not isinstance(members,list):raise Invalid('members must be an explicit audience')
+    members=sorted(set(members));audience(members)
+    if members==['*']:raise Invalid('use @public or named members')
+    obj=_body(node,'root',content,audience=members);checked(obj)
+    with node.transaction():
+        if node.db.execute('SELECT count(*) FROM threads').fetchone()[0]>=1000:raise Denied('thread quota reached')
+        seq=node.db.execute("SELECT coalesce(max(rowid),0) FROM threads").fetchone()[0]
+        node.db.execute("INSERT OR IGNORE INTO lifecycle VALUES('thread_seq',?)",(seq,))
+        node.db.execute("UPDATE lifecycle SET value=max(value,?)+1 WHERE key='thread_seq'",(seq,))
+        seq=node.db.execute("SELECT value FROM lifecycle WHERE key='thread_seq'").fetchone()[0]
+        node.db.execute('INSERT INTO threads(rowid,id,wire) VALUES(?,?,?)',(seq,obj['id'],canonical(obj).decode()))
+    return {'id':obj['id'],'host':node.id,'root':obj,'untrusted_data':True}
+
+
+def accept(node,obj,requester):
+    node.capability('threads');node.capability('receive')
+    b=checked(obj)
+    if b['kind']!='reply' or b['origin']!=requester:raise Invalid('reply sender mismatch')
+    if requester!=node.id and node.peer(requester)['card']['certificate']!=b['certificate']:raise Denied('reply certificate is not pinned')
+    with node.transaction():
+        root=_root(node,b['thread']);_access(node,root,requester)
+        if root['body']['audience']!=['@public'] and requester!=node.id:node.require(requester,'message')
+        if b['parent']!=b['thread'] and not node.db.execute('SELECT 1 FROM posts WHERE id=? AND thread=?',(b['parent'],b['thread'])).fetchone():raise Invalid('parent not in this thread')
+        if node.db.execute('SELECT 1 FROM posts WHERE id=?',(obj['id'],)).fetchone():return {'id':obj['id']}
+        if node.db.execute('SELECT count(*) FROM posts').fetchone()[0]>=10000:raise Denied('post quota reached')
+        node.db.execute('INSERT INTO posts(id,thread,received,wire) VALUES(?,?,?,?)',(obj['id'],b['thread'],int(time.time()*1000),canonical(obj).decode()))
+    return {'id':obj['id']}
+
+
+def page(node,requester,*,thread=None,after=0,since_ms=0,until_ms=2**63-1,limit=50):
+    node.capability('threads')
+    if any(type(x) is not int or not 0<=x<=2**63-1 for x in (after,since_ms,until_ms,limit)) or not 1<=limit<=100 or until_ms<since_ms:raise Invalid('invalid thread page')
+    with node.lock:
+        if thread is not None:
+            if not valid_id(thread):raise Invalid('invalid thread ID')
+            root=_root(node,thread);_access(node,root,requester)
+            rows=node.db.execute('SELECT seq,received,wire FROM posts WHERE thread=? AND seq>? AND received>=? AND received<=? ORDER BY seq LIMIT ?', (thread,after,since_ms,until_ms,limit+1)).fetchall()
+        else:
+            if requester!=node.id:node.require(requester,'read')
+            root=None
+            # Root list cursors are stable rowids: roots are retained until explicit retirement.
+            rows=node.db.execute('SELECT rowid AS seq,wire FROM threads WHERE rowid>? ORDER BY rowid LIMIT ?', (after,limit+1)).fetchall()
+        entries=[];cursor=after;size=len(canonical(root))
+        for row in rows[:limit]:
+            obj=decode(row['wire'].encode())
+            if thread is None:
+                try:_access(node,obj,requester)
+                except Denied:cursor=row['seq'];continue
+                if not since_ms<=obj['body']['created_ms']<=until_ms:cursor=row['seq'];continue
+            entry={'object':obj,'cursor':row['seq'],'untrusted_data':True}
+            if thread is not None:entry['received_ms']=row['received']
+            cost=len(canonical(entry))
+            if size+cost>PAGE_BYTES:break
+            entries.append(entry);cursor=row['seq'];size+=cost
+        more=bool(rows and (len(rows)>limit or cursor<rows[-1]['seq']))
+    return {'root':root,'items':entries,'next':cursor if more else None,'untrusted_data':True,'host':node.id}
+
+
+def read(node,peer=None,**filters):
+    node.capability('threads')
+    if peer is None or peer==node.id:return page(node,node.id,**filters)
+    from .network import Client
+    result=Client(node,peer).request('threads',**filters)
+    root=result.get('root')
+    if filters.get('thread'):
+        if not root or root['id']!=filters['thread']:raise Invalid('wrong thread root')
+        body=checked(root)
+        if body['kind']!='root' or body['origin']!=peer:raise Invalid('wrong thread host')
+        if body['audience']!=['@public'] and node.id not in body['audience']:raise Denied('outside thread audience')
+    for entry in result['items']:
+        b=checked(entry['object'])
+        if root:
+            if b['kind']!='reply' or b['thread']!=root['id']:raise Invalid('wrong reply thread')
+            if root['body']['audience']!=['@public'] and b['origin'] not in root['body']['audience']+[peer]:raise Denied('unauthorized reply author')
+        elif b['kind']!='root' or b['origin']!=peer or (b['audience']!=['@public'] and node.id not in b['audience']):raise Invalid('invalid listed root')
+        entry['untrusted_data']=True
+    result['untrusted_data']=True
+    return result
+
+
+def enqueue(node,peer,op,args,*,ttl=604800):
+    node.capability('send');node.peer(peer)
+    if type(ttl) is not int or not 60<=ttl<=604800:raise Invalid('delivery ttl must be 60 seconds..7 days')
+    obj=args['message'] if op=='message' else args['post']
+    now=int(time.time())
+    with node.transaction():
+        if node.db.execute('SELECT count(*) FROM outbox').fetchone()[0]>=10000:raise Denied('outbox quota reached; acknowledge completed deliveries')
+        node.db.execute('INSERT OR IGNORE INTO outbox VALUES(?,?,?,?,?,0,?,?,?)',(obj['id'],peer,op,canonical(args).decode(),'queued',now,now+ttl,''))
+    return {'id':obj['id'],'state':'queued','expires':now+ttl,'acknowledgement':'remote receipt only; not agent processing'}
+
+
+def queue_message(node,peer,content,ttl=604800):
+    # The signed expiry bounds receiver replay suppression after inbox acknowledgement.
+    obj=node.make_message(peer,content,expires=int(time.time())+ttl)
+    return enqueue(node,peer,'message',{'message':obj},ttl=ttl)
+
+
+def reply(node,peer,thread,content,parent=None,ttl=604800):
+    node.capability('threads')
+    if not valid_id(thread) or (parent is not None and not valid_id(parent)):raise Invalid('invalid thread or parent')
+    obj=_body(node,'reply',content,thread=thread,parent=parent or thread)
+    if peer==node.id:return accept(node,obj,node.id)
+    return enqueue(node,peer,'thread_post',{'post':obj},ttl=ttl)
+
+
+def deliveries(node,*,after='',limit=50,ack=None):
+    node.capability('send')
+    if not isinstance(after,str) or (after and not valid_id(after)) or type(limit) is not int or not 1<=limit<=100:raise Invalid('invalid outbox page')
+    with node.transaction():
+        if ack is not None:
+            if not valid_id(ack):raise Invalid('invalid delivery ID')
+            node.db.execute("DELETE FROM outbox WHERE id=? AND state IN ('delivered','expired')",(ack,))
+        rows=node.db.execute('SELECT id,peer,op,state,attempts,next,expires,error FROM outbox WHERE id>? ORDER BY id LIMIT ?',(after,limit+1)).fetchall()
+    return {'items':[dict(r) for r in rows[:limit]],'next':rows[limit-1]['id'] if len(rows)>limit else None}
+
+
+def deliver(node):
+    from .network import Client
+    node.capability('send');node.capability('network')
+    now=int(time.time())
+    with node.transaction():
+        node.db.execute("UPDATE outbox SET state='expired' WHERE state='queued' AND expires<=?",(now,))
+        rows=node.db.execute("SELECT * FROM outbox WHERE state='queued' AND next<=? ORDER BY next LIMIT 1",(now,)).fetchall()
+    for row in rows:
+        try:
+            result=Client(node,row['peer']).request(row['op'],**decode(row['args'].encode()))
+            if result.get('id')!=row['id']:raise Invalid('delivery acknowledgement mismatch')
+            state='delivered';error=''
+        except Exception as exc:state='queued';error=type(exc).__name__+': '+str(exc)[:150]
+        with node.transaction():
+            node.db.execute('UPDATE outbox SET state=?,attempts=attempts+1,next=?,error=? WHERE id=?',(state,int(time.time())+min(300,2**min(row['attempts']+1,9)),error,row['id']))
+
+
+class DeliveryWorker:
+    def __init__(self,node):self.node=node;self.stop=threading.Event();self.thread=threading.Thread(target=self.run,daemon=True);node.delivery_worker=self;node.delivery_error=None
+    def run(self):
+        last_sweep=0
+        while not self.stop.wait(2):
+            try:
+                if time.monotonic()-last_sweep>60:
+                    from .cache import sweep
+                    sweep(self.node);last_sweep=time.monotonic()
+                deliver(self.node)
+            except Exception as exc:self.node.delivery_error=type(exc).__name__
+            else:self.node.delivery_error=None
+    def start(self):self.thread.start()
+    def close(self):self.stop.set();self.thread.join()
+
+
+def retire_thread(node,thread):
+    node.capability('threads');node.capability('retain')
+    if not valid_id(thread):raise Invalid('invalid thread ID')
+    with node.transaction():
+        node.db.execute('DELETE FROM posts WHERE thread=?',(thread,))
+        node.db.execute('DELETE FROM threads WHERE id=?',(thread,))
+    return {'retired':thread,'remote_copies_deleted':False}

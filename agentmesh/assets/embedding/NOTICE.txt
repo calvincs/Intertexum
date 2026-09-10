@@ -1,0 +1,5 @@
+Bundled embedding model: sentence-transformers/all-MiniLM-L6-v2
+ONNX conversion: qdrant/all-MiniLM-L6-v2-onnx at 5f1b8cd78bc4fb444dd171e59b18f3a3af89a079
+The Qdrant conversion model card declares Apache-2.0.
+Files are unmodified; original model card and license text accompany them.
+See docs/EMBEDDINGS.md and benchmarks/results for measured selection evidence.

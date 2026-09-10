@@ -1,0 +1,29 @@
+# Replace deployment values before use. No usable credentials are shipped.
+listening-port=3478
+tls-listening-port=5349
+realm=turn.example.org
+fingerprint
+lt-cred-mech
+# Provision unique long-term users using turnadmin or the protected user database.
+# user=node-unique-name:REPLACE_WITH_RANDOM_SECRET
+cert=/etc/letsencrypt/live/turn.example.org/fullchain.pem
+pkey=/etc/letsencrypt/live/turn.example.org/privkey.pem
+min-port=49160
+max-port=49200
+user-quota=8
+total-quota=128
+max-bps=1000000
+bps-capacity=20000000
+no-cli
+no-multicast-peers
+# Block internal destinations on a public relay; adjust only for deliberate private use.
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=100.64.0.0-100.127.255.255
+denied-peer-ip=::1
+denied-peer-ip=fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+denied-peer-ip=fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff

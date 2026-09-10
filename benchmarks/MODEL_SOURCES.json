@@ -1,0 +1,87 @@
+{
+  "candidates": {
+    "bge-small": {
+      "model": "BAAI/bge-small-en-v1.5",
+      "repo": "qdrant/bge-small-en-v1.5-onnx-q",
+      "onnx": "model_optimized.onnx",
+      "max_tokens": 512,
+      "license": "MIT",
+      "query_prefix": "Represent this sentence for searching relevant passages: ",
+      "revision": "52398278842ec682c6f32300af41344b1c0b0bb2",
+      "files": {
+        "README.md": {
+          "sha256": "3bf78bc7cb0def03b30a901331fa50ace3ddf7d6e411d7089a8a2db64f066f03",
+          "bytes": 907
+        },
+        "config.json": {
+          "sha256": "13582bcf2effc85b7bf3d3f5532e686bc1c9ce86bb009d10f0ec33cbe92299dd",
+          "bytes": 706
+        },
+        "model_optimized.onnx": {
+          "sha256": "51f1bd0addd6e859e42c2c8021a5e5461385bb676a649f4b269aa445449f2431",
+          "bytes": 66465124
+        },
+        "special_tokens_map.json": {
+          "sha256": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a",
+          "bytes": 695
+        },
+        "tokenizer.json": {
+          "sha256": "d241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66",
+          "bytes": 711396
+        },
+        "tokenizer_config.json": {
+          "sha256": "0b29c7bfc889e53b36d9dd3e686dd4300f6525110eaa98c76a5dafceb2029f53",
+          "bytes": 1242
+        },
+        "vocab.txt": {
+          "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+          "bytes": 231508
+        }
+      }
+    },
+    "minilm": {
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "repo": "qdrant/all-MiniLM-L6-v2-onnx",
+      "onnx": "model.onnx",
+      "max_tokens": 256,
+      "license": "Apache-2.0",
+      "query_prefix": "",
+      "revision": "5f1b8cd78bc4fb444dd171e59b18f3a3af89a079",
+      "files": {
+        "README.md": {
+          "sha256": "2c47a70b94fe29e24841acf0e177949f1c9aa543e450d43af7e872ea81e43501",
+          "bytes": 945
+        },
+        "config.json": {
+          "sha256": "1b4d8e2a3988377ed8b519a31d8d31025a25f1c5f8606998e8014111438efcd7",
+          "bytes": 650
+        },
+        "model.onnx": {
+          "sha256": "bbd7b466f6d58e646fdc2bd5fd67b2f5e93c0b687011bd4548c420f7bd46f0c5",
+          "bytes": 90387630
+        },
+        "special_tokens_map.json": {
+          "sha256": "5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a",
+          "bytes": 695
+        },
+        "tokenizer.json": {
+          "sha256": "da0e79933b9ed51798a3ae27893d3c5fa4a201126cef75586296df9b4d2c62a0",
+          "bytes": 711661
+        },
+        "tokenizer_config.json": {
+          "sha256": "bd2e06a5b20fd1b13ca988bedc8763d332d242381b4fbc98f8fead4524158f79",
+          "bytes": 1433
+        },
+        "vocab.txt": {
+          "sha256": "07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3",
+          "bytes": 231508
+        }
+      }
+    }
+  },
+  "dataset": {
+    "url": "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/scifact.zip",
+    "sha256": "536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165",
+    "bytes": 2816079
+  }
+}

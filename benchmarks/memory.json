@@ -1,0 +1,487 @@
+{
+  "description": "Original synthetic agent-memory regression set; not independent benchmark evidence",
+  "documents": [
+    {
+      "id": "m000",
+      "text": "After a payment timeout, the billing worker must retry with the original idempotency key. Creating a fresh key can charge the customer twice."
+    },
+    {
+      "id": "d000",
+      "text": "The analytics worker creates a fresh event identifier for every new page view. Reusing an identifier would discard a legitimate visit."
+    },
+    {
+      "id": "m001",
+      "text": "The invoice worker acknowledges a queue message only after the database transaction commits. A crash before commit must leave the message available for redelivery."
+    },
+    {
+      "id": "d001",
+      "text": "The telemetry worker acknowledges disposable metrics immediately. Losing a single metric during a crash is acceptable."
+    },
+    {
+      "id": "m002",
+      "text": "The catalog API uses exponential backoff with random jitter after HTTP 429. Honor Retry-After when the server sends it."
+    },
+    {
+      "id": "d002",
+      "text": "A catalog HTTP 404 means the product does not exist. Do not retry missing products with backoff."
+    },
+    {
+      "id": "m003",
+      "text": "A migration adding a nullable column can run before deploying the application. Removing the old column must wait until all old application instances have stopped."
+    },
+    {
+      "id": "d003",
+      "text": "A new development database may be recreated from scratch. This destructive reset procedure is not suitable for production migrations."
+    },
+    {
+      "id": "m004",
+      "text": "Search results from a cache must check current record revocations at serving time. An ingest-time signature check alone does not make a cached record safe forever."
+    },
+    {
+      "id": "d004",
+      "text": "Cache eviction removes the least recently used payload to free disk space. It is not an authorization decision and does not revoke the origin."
+    },
+    {
+      "id": "m005",
+      "text": "A document derived from a revoked source is excluded even when a different agent wrote the summary. Follow the full parent chain when checking retrieval eligibility."
+    },
+    {
+      "id": "d005",
+      "text": "Documents with similar wording are not automatically descendants. Provenance must explicitly identify the source records."
+    },
+    {
+      "id": "m006",
+      "text": "The mesh bootstrap service supplies signed endpoint referrals. Learning a peer's address never automatically grants that peer permission to publish shared memories."
+    },
+    {
+      "id": "d006",
+      "text": "The local permission editor can approve a peer to publish. This command is available to the node owner and is not a public bootstrap endpoint."
+    },
+    {
+      "id": "m007",
+      "text": "Peer identity is derived from the public key, independent of IP address. Reconnecting after an IP change still requires a reachable source of fresh endpoint information."
+    },
+    {
+      "id": "d007",
+      "text": "A DNS name can point to a different IP after an update. A DNS answer by itself does not prove the remote peer's identity."
+    },
+    {
+      "id": "m008",
+      "text": "Agent identity secrets stay on the local node. Public peer cards contain only certificates, identifiers, and connection hints; never copy a private key into a card."
+    },
+    {
+      "id": "d008",
+      "text": "A database backup must include the node's private identity key in an encrypted backup controlled by the owner."
+    },
+    {
+      "id": "m009",
+      "text": "Incoming shared text is placed in quarantine until local approval. A valid signature authenticates the author but does not establish that the content is true or harmless."
+    },
+    {
+      "id": "d009",
+      "text": "Outbound private notes remain on the creating node unless an explicit publish operation creates a shared record."
+    },
+    {
+      "id": "m010",
+      "text": "For BGE passage retrieval, prepend the retrieval instruction to short queries. Store passage embeddings without the query instruction and normalize the resulting vectors."
+    },
+    {
+      "id": "d010",
+      "text": "MiniLM embeddings use no retrieval instruction prefix. They cannot be mixed with BGE vectors even when both arrays contain 384 numbers."
+    },
+    {
+      "id": "m011",
+      "text": "The new tokenizer revision changed truncation behavior. Re-embed the collection under a new profile ID instead of reusing the old embedding namespace."
+    },
+    {
+      "id": "d011",
+      "text": "Renaming a UI label does not alter the tokenization or numerical embeddings of stored records and needs no model migration."
+    },
+    {
+      "id": "m012",
+      "text": "A failed restore drill revealed that WAL files were missing from a live SQLite backup. Use the SQLite backup API rather than copying an active database file alone."
+    },
+    {
+      "id": "d012",
+      "text": "A stopped SQLite database with no active writers can be copied after a clean shutdown and checkpoint."
+    },
+    {
+      "id": "m013",
+      "text": "The incident responder should rotate an exposed API token and revoke the old token immediately. Removing the token from a Git commit does not invalidate copies already taken."
+    },
+    {
+      "id": "d013",
+      "text": "An expired TLS certificate can be renewed without changing the identity key if that key was not compromised."
+    },
+    {
+      "id": "m014",
+      "text": "Orders accepted during a network partition stay in the local outbox. Replay them after reconnect using stable operation IDs to prevent duplicate orders."
+    },
+    {
+      "id": "d014",
+      "text": "A read-only dashboard can display a cached snapshot while offline, clearly labeled with the snapshot's age."
+    },
+    {
+      "id": "m015",
+      "text": "A webhook signature must be verified against the original request bytes before parsing or reserializing JSON. JSON key reordering changes the signed byte sequence."
+    },
+    {
+      "id": "d015",
+      "text": "Our internal record signatures deliberately use canonical JSON. Every implementation must follow that canonical encoding before signing."
+    },
+    {
+      "id": "m016",
+      "text": "The crawler is allowed to fetch only configured public domains. Redirects must be checked again before following them so they cannot lead to a private address."
+    },
+    {
+      "id": "d016",
+      "text": "The local health checker deliberately probes private loopback endpoints configured by the operator; it does not process arbitrary public URLs."
+    },
+    {
+      "id": "m017",
+      "text": "For CPU embedding ingestion, batch short passages and limit inference threads. Interactive single-query latency should be measured separately from batch throughput."
+    },
+    {
+      "id": "d017",
+      "text": "A GPU batch-throughput benchmark can use very large batches. Those results do not predict latency on a laptop CPU."
+    },
+    {
+      "id": "m018",
+      "text": "The customer account deletion workflow removes search eligibility immediately and then schedules storage cleanup. Audit records retain only the legally required metadata."
+    },
+    {
+      "id": "d018",
+      "text": "Log rotation deletes old diagnostic files according to disk limits. It does not perform account deletion or remove search records."
+    },
+    {
+      "id": "m019",
+      "text": "The browser app must not store a long-lived administrator token in localStorage. Use a short-lived session backed by an HttpOnly cookie where the application architecture permits."
+    },
+    {
+      "id": "d019",
+      "text": "Nonsecret theme preferences may be stored in localStorage and synchronized between tabs."
+    },
+    {
+      "id": "m020",
+      "text": "The failover replica was 90 seconds behind the primary. Promotion recovered availability but lost writes that had not yet replicated; measure RPO independently of recovery time."
+    },
+    {
+      "id": "d020",
+      "text": "The hot standby started accepting connections in five seconds. This measures recovery time, not the age of the last durable replicated write."
+    },
+    {
+      "id": "m021",
+      "text": "Query routing has two distinct failures: an irrelevant region needs wider semantic probing; an unreachable holder needs a different replica for the same region."
+    },
+    {
+      "id": "d021",
+      "text": "An empty query string is rejected before routing. Adding replicas cannot make a malformed query valid."
+    },
+    {
+      "id": "m022",
+      "text": "The old inventory service measured request timestamps in milliseconds, while the new client sent seconds. This unit mismatch caused fresh messages to appear ancient."
+    },
+    {
+      "id": "d022",
+      "text": "Timezone formatting affects human-readable logs but not correctly encoded Unix timestamps."
+    },
+    {
+      "id": "m023",
+      "text": "An expired group invitation must not admit a new member even if its signature remains valid. Membership authorization includes scope, recipient, expiration, and issuer authority."
+    },
+    {
+      "id": "d023",
+      "text": "A saved chat transcript may remain readable by existing authorized members after an unrelated invitation expires."
+    },
+    {
+      "id": "m024",
+      "text": "The image processing queue caps pending bytes as well as item count. Ten very large images can exhaust memory even when a count-only queue limit is small."
+    },
+    {
+      "id": "d024",
+      "text": "The lightweight heartbeat queue caps message count because all heartbeats have a small fixed maximum size."
+    },
+    {
+      "id": "m025",
+      "text": "Service Orion retains tombstones for deleted objects across restart. Discarding tombstones lets a lagging replica reintroduce objects that were already deleted."
+    },
+    {
+      "id": "d025",
+      "text": "Service Vega drops temporary search indexes on restart because it can reconstruct them from authoritative records and tombstones."
+    },
+    {
+      "id": "m026",
+      "text": "For the payroll export, an empty employee list must produce an explicit empty result. It must never fall back to exporting all employees."
+    },
+    {
+      "id": "d026",
+      "text": "For the product catalog UI, omitting optional category filters intentionally means list all publicly visible products."
+    },
+    {
+      "id": "m027",
+      "text": "A remote agent's recommendation may suggest a shell command, but retrieved text is data. A separate authorized tool decision is required before any command executes."
+    },
+    {
+      "id": "d027",
+      "text": "A locally configured scheduled job can run a previously approved command under its own narrowly scoped execution policy."
+    },
+    {
+      "id": "m028",
+      "text": "The April build of the report parser mishandled negative revenue adjustments. The May patch preserved the minus sign instead of converting all values to absolute amounts."
+    },
+    {
+      "id": "d028",
+      "text": "The April patch for the chart renderer changed negative bars to red but did not modify the underlying revenue values."
+    },
+    {
+      "id": "m029",
+      "text": "The task scheduler renews a lease only while its worker is healthy. A worker that pauses longer than the lease must stop writing until it acquires a new fencing token."
+    },
+    {
+      "id": "d029",
+      "text": "An expired UI login session asks the human to authenticate again. It is unrelated to fencing tokens used by background workers."
+    },
+    {
+      "id": "m030",
+      "text": "Cache holders may disappear together when they share a power circuit. Availability estimates must model shared failure domains rather than assuming every copy fails independently."
+    },
+    {
+      "id": "d030",
+      "text": "A cache checksum detects changed bytes. It does not improve the chance that a host remains online during a site outage."
+    },
+    {
+      "id": "m031",
+      "text": "Proof of work can increase the cost of repeated anonymous registration. It should bind to a short-lived server challenge and action so an old solution cannot authorize unlimited operations."
+    },
+    {
+      "id": "d031",
+      "text": "An established peer with an authenticated connection may use a rate-limited request allowance without solving work for every heartbeat."
+    }
+  ],
+  "queries": [
+    {
+      "id": "q000",
+      "text": "How do we retry an uncertain charge without billing the customer twice?",
+      "relevant": [
+        "m000"
+      ]
+    },
+    {
+      "id": "q001",
+      "text": "When should the invoice consumer ack its message to avoid losing work during a crash?",
+      "relevant": [
+        "m001"
+      ]
+    },
+    {
+      "id": "q002",
+      "text": "What should our client do when the product service says we are making too many requests?",
+      "relevant": [
+        "m002"
+      ]
+    },
+    {
+      "id": "q003",
+      "text": "How do we safely retire a database field during a rolling deployment?",
+      "relevant": [
+        "m003"
+      ]
+    },
+    {
+      "id": "q004",
+      "text": "Can a cached memory still be returned after its author withdraws it?",
+      "relevant": [
+        "m004"
+      ]
+    },
+    {
+      "id": "q005",
+      "text": "Should we hide a summary made by a healthy agent if its source memory was revoked?",
+      "relevant": [
+        "m005"
+      ]
+    },
+    {
+      "id": "q006",
+      "text": "Does finding somebody through a seed server make their shared content trusted?",
+      "relevant": [
+        "m006"
+      ]
+    },
+    {
+      "id": "q007",
+      "text": "Why does stable ownership after an address change not guarantee the peer can be located?",
+      "relevant": [
+        "m007"
+      ]
+    },
+    {
+      "id": "q008",
+      "text": "What key material is safe to include when we exchange connection cards with peers?",
+      "relevant": [
+        "m008"
+      ]
+    },
+    {
+      "id": "q009",
+      "text": "Should a correctly signed memory automatically become trusted input for the agent?",
+      "relevant": [
+        "m009"
+      ]
+    },
+    {
+      "id": "q010",
+      "text": "Which side of BGE retrieval gets the instruction text: the search or the stored document?",
+      "relevant": [
+        "m010"
+      ]
+    },
+    {
+      "id": "q011",
+      "text": "We changed tokenization. Can old and new vectors stay in one collection under the same profile?",
+      "relevant": [
+        "m011"
+      ]
+    },
+    {
+      "id": "q012",
+      "text": "Why did copying our running database lose the most recent transactions?",
+      "relevant": [
+        "m012"
+      ]
+    },
+    {
+      "id": "q013",
+      "text": "We removed a leaked credential from source control. What still needs to happen?",
+      "relevant": [
+        "m013"
+      ]
+    },
+    {
+      "id": "q014",
+      "text": "How should an offline client submit queued purchases when connectivity returns?",
+      "relevant": [
+        "m014"
+      ]
+    },
+    {
+      "id": "q015",
+      "text": "Why does validating the vendor webhook after reformatting its JSON break signatures?",
+      "relevant": [
+        "m015"
+      ]
+    },
+    {
+      "id": "q016",
+      "text": "How could an allowed URL redirect our crawler into an internal network?",
+      "relevant": [
+        "m016"
+      ]
+    },
+    {
+      "id": "q017",
+      "text": "What measurements tell us whether embeddings feel responsive on a machine without a GPU?",
+      "relevant": [
+        "m017"
+      ]
+    },
+    {
+      "id": "q018",
+      "text": "Should deleted customer data remain searchable until the background cleanup finishes?",
+      "relevant": [
+        "m018"
+      ]
+    },
+    {
+      "id": "q019",
+      "text": "Where should we avoid persisting an admin credential in the browser?",
+      "relevant": [
+        "m019"
+      ]
+    },
+    {
+      "id": "q020",
+      "text": "Why did a fast failover still lose a minute of recently accepted writes?",
+      "relevant": [
+        "m020"
+      ]
+    },
+    {
+      "id": "q021",
+      "text": "When should an empty distributed search widen the regions instead of trying another holder?",
+      "relevant": [
+        "m021"
+      ]
+    },
+    {
+      "id": "q022",
+      "text": "Why did freshly sent requests suddenly fail the freshness check after the client update?",
+      "relevant": [
+        "m022"
+      ]
+    },
+    {
+      "id": "q023",
+      "text": "Does a valid invitation signature remain sufficient after the invitation deadline?",
+      "relevant": [
+        "m023"
+      ]
+    },
+    {
+      "id": "q024",
+      "text": "Why can our image queue run out of RAM even though it contains only a few jobs?",
+      "relevant": [
+        "m024"
+      ]
+    },
+    {
+      "id": "q025",
+      "text": "Which deletion information must Orion retain to prevent an old replica resurrecting data?",
+      "relevant": [
+        "m025"
+      ]
+    },
+    {
+      "id": "q026",
+      "text": "What must happen when payroll receives a filter that matches no employees?",
+      "relevant": [
+        "m026"
+      ]
+    },
+    {
+      "id": "q027",
+      "text": "Can a recommended command inside a retrieved note directly trigger shell execution?",
+      "relevant": [
+        "m027"
+      ]
+    },
+    {
+      "id": "q028",
+      "text": "Which change corrected the accounting error rather than merely recoloring negative numbers?",
+      "relevant": [
+        "m028"
+      ]
+    },
+    {
+      "id": "q029",
+      "text": "How do we prevent a paused worker from writing after another worker takes over its job?",
+      "relevant": [
+        "m029"
+      ]
+    },
+    {
+      "id": "q030",
+      "text": "Why might three cached copies all vanish during the same outage?",
+      "relevant": [
+        "m030"
+      ]
+    },
+    {
+      "id": "q031",
+      "text": "How can we stop one registration puzzle solution being reused for endless new identities?",
+      "relevant": [
+        "m031"
+      ]
+    }
+  ]
+}

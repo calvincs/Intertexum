@@ -1,0 +1,18 @@
+include uv.lock
+recursive-include docs *.md *.json
+recursive-include examples *.py
+recursive-include tests *.py
+include benchmarks/*.py benchmarks/*.md benchmarks/*.json
+recursive-include benchmarks/licenses *.txt *.json
+recursive-include ops *.conf *.example
+recursive-include integration *.py
+include llm.txt llms.txt
+recursive-include scripts *.py
+recursive-include .github/workflows *.yml
+prune archived
+prune .scratch
+prune benchmarks/assets
+prune benchmarks/results
+prune .venv
+global-exclude *.py[cod] *.key *.pem *.sqlite *.sqlite-* *.sock *.log *.ses
+include .gitignore CONTRIBUTING.md SECURITY.md DISCLAIMER.md AGENTS.md NOTICE

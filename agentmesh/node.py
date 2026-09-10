@@ -1,0 +1,451 @@
+"""Durable node state. Every peer has its own database and local policy.
+
+All serving paths use the same recursive authorization function. Receiving a
+valid signature does not approve content. Neither referrals nor self-reported
+reputation grant permissions.
+"""
+from __future__ import annotations
+
+import json
+import sqlite3
+import threading
+import time
+from contextlib import contextmanager
+from pathlib import Path
+
+from .crypto import Identity, Invalid, Denied, canonical, decode, certificate, public_id, sign, verify, valid_id
+from .records import (RECORD_DOMAIN, RETRACT_DOMAIN, MESSAGE_DOMAIN, MAX_DEPTH, SearchBudget,
+                      validate_record, vector, text, rank)
+
+PERMISSIONS = {"read", "publish", "message", "public"}
+SEARCH_LIMIT = 20
+MAX_RECORDS = 10000
+MAX_EVENTS = 10000
+
+
+class Node:
+    def __init__(self, directory):
+        self.directory = Path(directory)
+        self.identity = Identity(self.directory)
+        self.id = self.identity.id
+        self.connectivity = None
+        from .defense import Defense
+        self.defense = Defense(self.directory)
+        config = decode((self.directory / "config.json").read_bytes())
+        self.model, self.dimensions = config["model"], config["dimensions"]
+        self.lock = threading.RLock()
+        self.active_mutations=set()
+        self.db = sqlite3.connect(self.directory / "mesh.sqlite", check_same_thread=False,
+                                  isolation_level=None, timeout=10)
+        self.db.row_factory = sqlite3.Row
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA synchronous=FULL")
+        self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS admissions (peer TEXT PRIMARY KEY, expires INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS peers (
+                id TEXT PRIMARY KEY, card TEXT NOT NULL, permissions TEXT NOT NULL,
+                blocked INTEGER NOT NULL DEFAULT 0);
+            CREATE TABLE IF NOT EXISTS records (
+                id TEXT PRIMARY KEY, wire TEXT NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('private','pending','accepted')));
+            CREATE TABLE IF NOT EXISTS retractions (
+                id TEXT PRIMARY KEY, origin TEXT NOT NULL, target TEXT NOT NULL,
+                wire TEXT NOT NULL, UNIQUE(origin,target));
+            CREATE TABLE IF NOT EXISTS messages (
+                id TEXT PRIMARY KEY, wire TEXT NOT NULL);
+        """)
+
+        from .lifecycle import schema as lifecycle_schema
+        from .openmesh import schema as open_schema
+        lifecycle_schema(self);open_schema(self)
+        from .conversations import schema as conversation_schema
+        conversation_schema(self)
+        from .cache import schema as cache_schema
+        cache_schema(self)
+
+    @classmethod
+    def create(cls, directory, *, model=None, dimensions=None):
+        if model is None and dimensions is None:
+            from .embedding import profile
+            selected = profile()
+            model, dimensions = selected['id'], selected['spec']['dimensions']
+        if not isinstance(model, str) or not model.strip() or len(model) > 200:
+            raise Invalid("an embedding model identifier is required")
+        if type(dimensions) is not int or not 1 <= dimensions <= 4096:
+            raise Invalid("dimensions must be between 1 and 4096")
+        Identity.create(Path(directory))
+        (Path(directory) / "config.json").write_bytes(canonical({"model": model, "dimensions": dimensions}))
+        return cls(directory)
+
+    @contextmanager
+    def transaction(self):
+        with self.lock:
+            self.db.execute('SAVEPOINT node_change')
+            try:
+                yield
+                self.db.execute('RELEASE node_change')
+            except BaseException:
+                self.db.execute('ROLLBACK TO node_change')
+                self.db.execute('RELEASE node_change')
+                raise
+
+    def close(self):
+        if self.connectivity:
+            self.connectivity.close()
+            self.connectivity=None
+        with self.lock:
+            self.db.close()
+            self.defense.close()
+
+    def capability(self, name):
+        from .onboarding import require
+        require(self,name)
+
+    def write_text(self, content, *, parents=()):
+        self.capability('write')
+        from .embedding import encode_for
+        return self.write_private(content, encode_for(self,content), parents=parents)
+
+    def search_text(self, content, *, k=10):
+        self.capability('search')
+        from .embedding import encode_for
+        return self.search(self.id,query_text=content,query_vector=encode_for(self,content,query=True),
+                           model=self.model,k=k)
+
+    def card(self, host="127.0.0.1", port=0):
+        # Endpoint is a local operator hint, not an authenticated discovery claim.
+        return {"id": self.id, "certificate": self.identity.pem, "host": host, "port": port}
+
+    def trust(self, card, permissions):
+        if not isinstance(card, dict) or set(card) != {"id", "certificate", "host", "port"}:
+            raise Invalid("invalid peer card")
+        cert = certificate(card["certificate"])
+        if public_id(cert.public_key()) != card["id"]:
+            raise Invalid("peer ID does not match certificate")
+        if (not isinstance(card["host"], str) or not card["host"] or len(card["host"]) > 253
+                or type(card["port"]) is not int or not 1 <= card["port"] <= 65535):
+            raise Invalid("invalid peer endpoint")
+        if not isinstance(permissions, (list, set, tuple)) or not set(permissions) <= PERMISSIONS:
+            raise Invalid("unknown permission")
+        if card["id"] == self.id:
+            raise Invalid("cannot add self as a remote peer")
+        with self.transaction():
+            self.db.execute('DELETE FROM admissions WHERE peer=?',(card['id'],))
+            # Trust is a LOCAL operator action; there is no network trust endpoint.
+            self.db.execute("""INSERT INTO peers(id,card,permissions,blocked) VALUES(?,?,?,0)
+                ON CONFLICT(id) DO UPDATE SET card=excluded.card,
+                permissions=excluded.permissions, blocked=0""",
+                (card["id"], canonical(card).decode(), json.dumps(sorted(set(permissions)))))
+
+    def peers(self):
+        from .openmesh import effective
+        with self.lock:
+            result=[]
+            for row in self.db.execute("SELECT * FROM peers ORDER BY id"):
+                grant=self.db.execute('SELECT expires FROM grants WHERE peer=?',(row['id'],)).fetchone()
+                admission=self.db.execute('SELECT expires FROM admissions WHERE peer=?',(row['id'],)).fetchone()
+                result.append({'card':decode(row['card'].encode()),
+                    'permissions':sorted(effective(self,row['id'],json.loads(row['permissions']))),
+                    'blocked':bool(row['blocked']),
+                    'grant_expires':grant[0] if grant else None,
+                    'membership_expires':admission[0] if admission else None})
+            return result
+
+    def peer(self, peer_id, *, allow_blocked=False):
+        with self.lock:
+            row = self.db.execute("SELECT * FROM peers WHERE id=?", (peer_id,)).fetchone()
+            admission=self.db.execute('SELECT expires FROM admissions WHERE peer=?',(peer_id,)).fetchone()
+            if not allow_blocked and admission and admission[0]<=time.time():raise Denied('membership_expired')
+            if row is None or (row["blocked"] and not allow_blocked):
+                raise Denied("peer is unknown or blocked")
+            from .openmesh import effective
+            return {"card": decode(row["card"].encode()), "permissions": sorted(effective(self,peer_id,json.loads(row["permissions"]))),
+                    "blocked": bool(row["blocked"])}
+
+    def require(self, peer_id, permission):
+        if peer_id!=self.id:
+            allowed=self.peer(peer_id)['permissions']
+            if permission not in allowed and not (permission=='read' and 'public' in allowed):raise Denied('permission denied')
+
+    def block(self, peer_id):
+        with self.lock:
+            self.peer(peer_id, allow_blocked=True)
+            self.db.execute("UPDATE peers SET blocked=1 WHERE id=?", (peer_id,))
+
+    def _key(self, peer_id, *, historical=False):
+        if peer_id == self.id:
+            return self.identity.key.public_key()
+        return certificate(self.peer(peer_id, allow_blocked=historical)["card"]["certificate"]).public_key()
+
+    def _verified_record(self, obj, *, private=False):
+        try:
+            origin = obj["body"]["origin"]
+            if origin!=self.id:
+                permissions=self.peer(origin)['permissions']
+                if 'publish' not in permissions and not ('public' in permissions and obj['body'].get('audience')==['@public']):raise Denied('origin cannot publish private memory')
+            body = verify(obj, self._key(origin), RECORD_DOMAIN)
+            validate_record(body, self.model, self.dimensions, private=private)
+            return body
+        except (KeyError, TypeError) as exc:
+            raise Invalid("invalid record") from exc
+
+    def _row(self, rid):
+        return self.db.execute("SELECT * FROM records WHERE id=?", (rid,)).fetchone()
+
+    def _save(self, obj, state):
+        wire = canonical(obj).decode()
+        if not self._row(obj["id"]) and self.db.execute("SELECT count(*) FROM records").fetchone()[0] >= MAX_RECORDS:
+            raise Denied("node record quota reached")
+        self.db.execute("INSERT OR IGNORE INTO records VALUES(?,?,?)", (obj["id"], wire, state))
+
+    def write_private(self, content, embedding, *, parents=()):
+        self.capability('write')
+        with self.lock:
+            body = {"version": 1, "origin": self.id, "model": self.model,
+                    "vector": vector(embedding, self.dimensions), "text": content,
+                    "parents": sorted(set(parents)), "audience": [], "created_ms": int(time.time()*1000)}
+            validate_record(body, self.model, self.dimensions, private=True)
+            obj = sign(self.identity.key, RECORD_DOMAIN, body)
+            self._save(obj, "private")
+            return obj["id"]
+
+    def publish(self, private_id, *, audience):
+        self.capability('publish')
+        with self.lock:
+            row = self._row(private_id)
+            if row is None or row["state"] != "private":
+                raise Invalid("publish requires a local private record")
+            obj = decode(row["wire"].encode())
+            body = self._verified_record(obj, private=True)
+            body["audience"] = sorted(set(audience))
+            validate_record(body, self.model, self.dimensions)
+            self._check_parents(body)
+            shared = sign(self.identity.key, RECORD_DOMAIN, body)
+            if self._withdrawn(shared["id"], self.id):
+                raise Denied("this content has been withdrawn")
+            self._save(shared, "accepted")
+            return shared["id"]
+
+    def _visible(self,body,requester):
+        if requester==body['origin']:return True
+        if body['audience']==['@public']:return True
+        if requester!=self.id and 'read' not in self.peer(requester)['permissions']:return False
+        return body['audience']==['*'] or requester in body['audience']
+
+    def _withdrawn(self, rid, origin):
+        return self.db.execute("SELECT 1 FROM retractions WHERE origin=? AND target=?", (origin, rid)).fetchone() is not None
+
+    def _active(self, rid, requester, path=None, memo=None, deadline=None, transit=False):
+        from .records import check_budget
+        check_budget(deadline)
+        path = set() if path is None else path
+        memo = {} if memo is None else memo
+        if rid in path or len(path) >= MAX_DEPTH:
+            return None
+        cache_key = (rid, len(path))
+        if cache_key in memo:
+            return memo[cache_key]
+        # Memoize failures too. Dense ancestry must not create exponential
+        # signature work when several branches share the same ancestors.
+        memo[cache_key] = None
+        row = self._row(rid)
+        if row is None:return None
+        cached=False
+        if row['state']!='accepted':
+            from .cache import eligible
+            cached=row['state']=='pending' and (requester!=self.id or transit) and eligible(self,rid,reshare=requester!=self.id)
+            if not cached:return None
+        try:
+            obj = decode(row["wire"].encode())
+            if obj["id"] != rid:
+                return None
+            body = self._verified_record(obj)
+            if cached and body['audience']!=['@public']:return None
+            if requester!=self.id and body['origin']!=self.id:
+                from .onboarding import policy
+                if not policy(self)['reshare']:return None
+            if self._withdrawn(rid, body["origin"]) or not self._visible(body, requester):
+                return None
+            for parent in body["parents"]:
+                ancestor=self._active(parent, requester, path | {rid}, memo,deadline,transit=transit)
+                if ancestor is None or (cached and ancestor['body']['audience']!=['@public']):return None
+            memo[cache_key] = obj
+            return obj
+        except SearchBudget:
+            raise
+        except (Invalid, Denied):
+            return None
+
+    def _check_parents(self, body):
+        for rid in body["parents"]:
+            parent = self._active(rid, self.id)
+            if parent is None:
+                raise Denied("parent is missing, unapproved, withdrawn, or inaccessible")
+            pa = parent["body"]["audience"]
+            if pa != ["@public"]:
+                allowed = set(pa) | {parent["body"]["origin"]}
+                if body["audience"] == ["@public"] or (pa != ["*"] and (body["audience"] == ["*"] or not set(body["audience"]) <= allowed)):
+                    raise Denied("derived memory cannot widen its parents' audience")
+
+    def ingest(self, obj):
+        self.capability("fetch")
+        with self.lock:
+            body = self._verified_record(obj)
+            if not self._visible(body, self.id):
+                raise Denied("this node is outside the record audience")
+            if self._withdrawn(obj["id"], body["origin"]):
+                raise Denied("record has been withdrawn")
+            if self.db.execute('SELECT 1 FROM rejected WHERE id=?',(obj['id'],)).fetchone():raise Denied('record rejected locally')
+            self._save(obj, "pending")
+            return obj["id"]
+
+    def approve(self, rid):
+        self.capability('approve')
+        with self.lock:
+            row = self._row(rid)
+            if row is None or row["state"] == "private":
+                raise Invalid("no imported record to approve")
+            obj = decode(row["wire"].encode())
+            body = self._verified_record(obj)
+            if self._withdrawn(rid, body["origin"]) or not self._visible(body, self.id):
+                raise Denied("record withdrawn or inaccessible")
+            self._check_parents(body)
+            # Limit depth by testing the resulting record under the same read policy.
+            old_state = row["state"]
+            self.db.execute("UPDATE records SET state='accepted' WHERE id=?", (rid,))
+            if self._active(rid, self.id) is None:
+                self.db.execute("UPDATE records SET state=? WHERE id=?", (old_state, rid))
+                raise Denied("record lineage exceeds depth limit")
+            self.db.execute("DELETE FROM transit_cache WHERE id=?",(rid,))
+
+    def inspect(self, rid):
+        """Local operator inspection, including pending/private/audit data."""
+        with self.lock:
+            row = self._row(rid)
+            if row is None:
+                raise Invalid("unknown record")
+            return {"state": row["state"], "record": decode(row["wire"].encode()), "untrusted_data": True}
+
+    def inventory(self):
+        with self.lock:
+            return [dict(row) for row in self.db.execute("SELECT id,state FROM records ORDER BY id")]
+
+    def get(self, rid, requester):
+        if requester!=self.id:self.capability("serve_memory")
+        with self.lock:
+            self.require(requester, "read")
+            obj = self._active(rid, requester)
+            if obj is None:
+                raise Denied("record unavailable")
+            return obj
+
+    def search(self, requester, *, query_text="", query_vector=None, model=None, k=10):
+        self.capability("search" if requester==self.id else "serve_memory")
+        with self.lock:
+            self.require(requester, "read")
+            if type(k) is not int or not 1 <= k <= SEARCH_LIMIT:
+                raise Invalid("k must be between 1 and 20")
+            if not isinstance(query_text, str) or len(query_text.encode()) > 4096:
+                raise Invalid("invalid search text")
+            if query_vector is not None:
+                if model != self.model:
+                    raise Invalid("embedding model mismatch")
+                query_vector = vector(query_vector, self.dimensions)
+            if not query_text.strip() and query_vector is None:
+                raise Invalid("search needs text or a vector")
+            memo = {}
+            deadline = time.monotonic()+.5 if requester!=self.id else None
+            records = [obj for row in self.db.execute("SELECT id FROM records WHERE state='accepted' OR id IN (SELECT id FROM transit_cache)").fetchall()
+                       if (obj := self._active(row["id"], requester, memo=memo,deadline=deadline)) is not None]
+            return {"results": rank(records, query_vector, query_text, k,deadline=deadline),
+                    "coverage": {"responding_peer": self.id, "scope": "authorized_local_records",
+                                 "records_considered": len(records), "network_complete": False}}
+
+    def retract(self, rid):
+        with self.lock:
+            row = self._row(rid)
+            if row is None or row["state"] == "private":
+                raise Invalid("no shared record to retract")
+            record = decode(row["wire"].encode())
+            if record["body"]["origin"] != self.id:
+                raise Denied("only the author can issue a retraction")
+            obj = sign(self.identity.key, RETRACT_DOMAIN,
+                       {"version": 1, "origin": self.id, "target": rid})
+            self.ingest_retraction(obj)
+            return obj
+
+    def ingest_retraction(self, obj):
+        with self.lock:
+            try:
+                # A blocked origin may still withdraw its own content. Never allow
+                # an arbitrary relay to withdraw another origin's content.
+                body = verify(obj, self._key(obj["body"]["origin"], historical=True), RETRACT_DOMAIN)
+            except (KeyError, TypeError) as exc:
+                raise Invalid("invalid retraction") from exc
+            if (set(body) != {"version", "origin", "target"} or type(body["version"]) is not int
+                    or body["version"] != 1 or not valid_id(body["target"])):
+                raise Invalid("invalid retraction schema")
+            if self.db.execute("SELECT count(*) FROM retractions").fetchone()[0] >= MAX_EVENTS:
+                if not self._withdrawn(body["target"], body["origin"]):
+                    raise Denied("retraction quota reached; operator action required")
+            target=self._row(body['target'])
+            if target and decode(target['wire'].encode())['body']['audience']==['@public']:
+                self.db.execute('INSERT OR IGNORE INTO public_tombstones VALUES(?)',(body['target'],))
+            self.db.execute("INSERT OR IGNORE INTO retractions VALUES(?,?,?,?)",
+                            (obj["id"], body["origin"], body["target"], canonical(obj).decode()))
+
+    def retractions(self, requester, after=""):
+        with self.lock:
+            self.require(requester, "read")
+            if not isinstance(after, str) or (after and not valid_id(after)):
+                raise Invalid("invalid cursor")
+            rows = self.db.execute("SELECT * FROM retractions WHERE id>? ORDER BY id LIMIT 500", (after,)).fetchall()
+            public_only=requester!=self.id and 'read' not in self.peer(requester)['permissions']
+            events=[]
+            for row in rows:
+                target=self._row(row['target'])
+                if not public_only or (target and decode(target['wire'].encode())['body']['audience']==['@public']) or self.db.execute('SELECT 1 FROM public_tombstones WHERE id=?',(row['target'],)).fetchone():events.append(decode(row['wire'].encode()))
+            return {"events": events,
+                    "next": rows[-1]["id"] if len(rows) == 500 else None}
+
+    def make_message(self, recipient, content, *, expires=None):
+        self.capability('send')
+        self.peer(recipient)
+        text(content)
+        import uuid
+        return sign(self.identity.key, MESSAGE_DOMAIN,
+                    {"version": 2 if expires is not None else 1, "origin": self.id, "recipient": recipient,
+                     "text": content, "nonce": uuid.uuid4().hex, **({"expires":expires} if expires is not None else {})})
+
+    def receive_message(self, obj, requester):
+        self.capability('receive')
+        with self.transaction():
+            self.require(requester, "message")
+            body = verify(obj, self._key(requester), MESSAGE_DOMAIN)
+            if (set(body) != ({"version", "origin", "recipient", "text", "nonce"} | ({"expires"} if body.get("version")==2 else set()))
+                    or type(body["version"]) is not int or body["version"] not in (1,2)
+                    or body["origin"] != requester or body["recipient"] != self.id
+                    or not isinstance(body["nonce"], str) or len(body["nonce"]) != 32):
+                raise Invalid("invalid direct message")
+            text(body["text"])
+            now=int(time.time())
+            expiry=body.get('expires',0)
+            if body['version']==2 and (type(expiry) is not int or not now<expiry<=now+604800):raise Denied('message expired or invalid expiry')
+            self.db.execute('DELETE FROM received_ids WHERE expires>0 AND expires<=?',(now,))
+            if self.db.execute('SELECT 1 FROM received_ids WHERE id=?',(obj['id'],)).fetchone():return obj['id']
+            if self.db.execute('SELECT count(*) FROM received_ids').fetchone()[0]>=20000:raise Denied('message replay budget reached')
+            self.db.execute('INSERT INTO received_ids VALUES(?,?)',(obj['id'],expiry))
+            if self.db.execute('SELECT 1 FROM messages WHERE id=?',(obj['id'],)).fetchone():return obj['id']
+            if self.db.execute("SELECT count(*) FROM messages").fetchone()[0] >= MAX_RECORDS:
+                raise Denied("inbox quota reached")
+            self.db.execute("INSERT OR IGNORE INTO messages VALUES(?,?)", (obj["id"], canonical(obj).decode()))
+            return obj["id"]
+
+    def inbox_page(self, *, after=0, limit=50):
+        from .lifecycle import message_page
+        return message_page(self,after=after,limit=limit)
+
+    def inbox(self):
+        with self.lock:
+            return [{"message": decode(row["wire"].encode()), "untrusted_data": True}
+                    for row in self.db.execute("SELECT wire FROM messages ORDER BY rowid")]

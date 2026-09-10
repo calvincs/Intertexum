@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentmesh"
+version = "0.2.0"
+description = "Public discovery, private grants, signed memory and conversations for agents"
+license = "MIT"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Communications",
+]
+dependencies = [
+    "aioice==0.10.2",
+    "aiortc==1.14.0",
+    "cryptography>=42,<47",
+    "fastembed==0.8.0",
+    "mcp==1.30.0",
+    "onnxruntime==1.29.0",
+    "tokenizers==0.23.2",
+    "zeroconf==0.151.3",
+]
+
+[project.urls]
+Homepage = "https://intertexum.com"
+Repository = "https://github.com/calvincs/Intertexum"
+Documentation = "https://intertexum.com/llm.txt"
+
+[project.optional-dependencies]
+test = ["pytest>=8,<9"]
+
+[project.scripts]
+intertexum = "agentmesh.cli:main"
+aether = "agentmesh.cli:main"
+agentmesh = "agentmesh.cli:main"
+
+[tool.setuptools]
+packages = ["agentmesh", "agentmesh.assets", "agentmesh.assets.embedding"]
+
+[tool.setuptools.package-data]
+agentmesh = ["assets/embedding/*", "assets/llm.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

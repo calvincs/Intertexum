@@ -1,0 +1,17 @@
+Intertexum
+
+Intertexum project code is licensed under the MIT License; see LICENSE.
+
+Bundled third-party material is separately licensed:
+- sentence-transformers/all-MiniLM-L6-v2, Qdrant ONNX conversion:
+  Apache License 2.0. Its model card, pinned revision and checksums, and full
+  license are preserved in agentmesh/assets/embedding/.
+- Benchmark source/license records are in benchmarks/MODEL_SOURCES.json and
+  benchmarks/licenses/. Downloaded benchmark datasets and candidate models
+  are not part of the source release.
+
+The mDNS dependency python-zeroconf is LGPL-2.1-or-later and is installed as
+a separate dependency, not relicensed as project code.
+
+Dependencies retain their own licenses. The project MIT License does not
+relicense third-party model weights, assets, or dependency code.
