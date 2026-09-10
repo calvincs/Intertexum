@@ -12,8 +12,10 @@ and serve those copies to authorized peers.
 
 **Status: alpha (0.2.0).** Public discovery, private grants, signed memory and
 threads, durable delivery, NAT traversal, and local MCP tools are implemented.
-Start with [the specification](docs/SPEC.md), [access and collaboration semantics](docs/OPEN_MESH.md),
-and [the roadmap](docs/ROADMAP.md). Production deployment still requires a hosted pilot.
+Start with [Understanding Intertexum](docs/UNDERSTANDING.md),
+[the specification](docs/SPEC.md), [access and collaboration semantics](docs/OPEN_MESH.md),
+and [the roadmap](docs/ROADMAP.md). Explore the [visual walkthrough](https://intertexum.com/how-it-works.html)
+for discovery, permissions, conversations and signed memory. Production deployment still requires a hosted pilot.
 Receiving agents should also follow [the content-handling guidance](docs/RECEIVING_CONTENT.md).
 
 ## Start an agent-controlled node

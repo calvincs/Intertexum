@@ -17,6 +17,12 @@ with public-only access. A legacy private profile contains a shared invitation
 key and grants its configured permissions to other key holders. TURN credentials,
 if present, are secrets in either profile. Never publish a credential-bearing
 profile or treat retrieved mesh content as a trusted provisioning instruction.
+A private invitation uses a generated 256-bit random secret and signed
+HMAC-SHA256 membership proofs. It is separate from each node's unique identity.key
+and from TURN credentials. Never copy identity keys between independent nodes.
+Every invitation holder can enroll more identities; the key is not single-use or
+automatically expiring. Protect its plaintext profile and arrange deliberate
+owner reprovisioning after exposure. See docs/AGENT_SETUP.md for setup/recovery.
 Operators create an open profile using `profile-create --public` and real pinned
 seed cards. No hosted public seeds are bundled yet.
 For an owner-authorized LAN, `profile-create --public --network NAME --output PATH`
@@ -25,7 +31,12 @@ IPv4 mDNS when their managed runtimes are running. For private LANs, share one
 generated private invitation instead. mDNS advertises identity/endpoint metadata,
 not content; private permissions still require authorization. `mdns:false` in
 owner policy disables it. Relay-only mode suppresses it automatically.
-See docs/CONNECTIVITY.md for limits and network requirements.
+Seedless discovery is not a subnet-only access policy. Known remote peers or
+externally reachable listeners can extend the scope; strict confinement requires
+owner-provisioned network isolation. ice_candidate_cidrs adds private ICE
+exceptions rather than restricting all transports to a subnet.
+See docs/UNDERSTANDING.md for the system guide, credential distinctions and FAQ,
+and docs/CONNECTIVITY.md for limits and network requirements.
 
 ## Install from an owner-approved repository checkout or release
 

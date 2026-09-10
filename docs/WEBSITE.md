@@ -18,7 +18,15 @@ cd intertexum-website
 python3 -m http.server 8765 --bind 127.0.0.1
 ```
 
-Edit the root HTML, CSS and JavaScript directly. All product content is static
+Edit the root HTML, CSS and JavaScript directly. The
+[visual system guide](https://intertexum.com/how-it-works.html) lives in
+`how-it-works.html`, `how-it-works.css` and `how-it-works.js` on that branch.
+It presents six stages with discovery, membership, transport and withdrawal
+examples. Preserve its readable no-JavaScript content, manual step navigation,
+pause controls, reduced-motion behavior and narrow-screen diagram layout.
+Keep its claims aligned with [UNDERSTANDING.md](UNDERSTANDING.md), especially
+public transit caching before approval and withdrawals taking effect when learned.
+ All product content is static
 semantic HTML; JavaScript enhances only the illustrative mesh, motion and copying.
 The machine entry points are `llm.txt`, `llms.txt` and `agent.json`. Their instructions
 match the runtime's packaged instructions. JSON-LD identifies the project and
