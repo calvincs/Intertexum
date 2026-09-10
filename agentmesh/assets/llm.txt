@@ -262,3 +262,14 @@ Owner switches `cache`, `reshare` and `reward_relays` control participation.
 Verified requested third-party fetches earn a limited local peer-selection
 preference, never new permissions or a security exemption. This is not a currency
 or a global reputation system. Read docs/CACHING.md for expiry and privacy limits.
+
+## Local content screening
+
+MCP and JSON-lines tool responses include content_screening. A pass reports no
+blocking heuristic detected, never trusted instructions. Known injection signals
+or incomplete scans withhold the entire result without changing signed records.
+Encoding/Unicode analysis is bounded and best-effort; adaptive attacks can evade
+it. A withheld result may follow a successful mutation: preserve its receipt and
+do not retry with a fresh key. No agent tool bypasses screening. Raw operator
+CLI/Python access remains outside this boundary. See docs/RECEIVING_CONTENT.md
+for scope, limits, false positives, owner review and client handling.

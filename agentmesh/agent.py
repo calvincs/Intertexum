@@ -169,7 +169,7 @@ def execute(node,name,a):
     if name=='sync':return Client(node,a['peer']).sync_retractions()
 
 
-def call(node, request):
+def _call(node, request):
     rid=request.get('id') if isinstance(request,dict) else None
     reserved=False
     try:
@@ -211,6 +211,11 @@ def call(node, request):
             node.db.execute('UPDATE tool_receipts SET response=? WHERE id=?',(canonical(response).decode(),rid))
             node.active_mutations.discard(rid)
     return response
+
+
+def call(node, request):
+    from .screening import screen_response
+    return screen_response(_call(node, request))
 
 
 def runtime(node):
