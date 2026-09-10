@@ -1,5 +1,11 @@
 # Bootstrap, public joining, and admission work
 
+A **bootstrap node** helps other nodes find peers and exchange signed connection
+setup signals. The configuration name is **seed**: `seeds` holds bootstrap-node
+cards and each `--seed` option supplies one card on the CLI. It does not carry memory or messages
+or grant private access. See the [glossary](GLOSSARY.md#bootstrap-node) for this
+and related terms.
+
 Updated defense policy: see [DEFENSE.md](DEFENSE.md) for shared blocks, audit,
 temporary bans, search protection and tighter registration quotas. Public-address
 mode now defaults to 18-bit work (minimum 16); private-demo default stays zero.

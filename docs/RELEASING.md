@@ -21,6 +21,9 @@ from the reviewed main checkout:
 ```sh
 python3 scripts/sync_website_docs.py --website /path/to/intertexum-website
 python3 scripts/sync_website_docs.py --website /path/to/intertexum-website --check
+python3 -m pip install -r /path/to/intertexum-website/docs-requirements.txt
+python3 /path/to/intertexum-website/build_docs.py
+python3 /path/to/intertexum-website/build_docs.py --check
 python3 /path/to/intertexum-website/check_site.py
 ```
 

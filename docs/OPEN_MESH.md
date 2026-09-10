@@ -16,7 +16,7 @@ explicitly distinct from open discovery.
 | Content | Who can discover/read it? |
 | --- | --- |
 | A local `write` or `write_document` | This node's local harness only |
-| Published audience `["@public"]` | Any authenticated discovered peer; peers may cache and serve approved copies |
+| Published audience `["@public"]` | Any authenticated discovered peer; peers may serve eligible cached copies, including pending public transit copies |
 | Published audience `["PEER_ID", …]` | Named recipients with a current local `read` grant, plus the author |
 | Legacy audience `["*"]` | Locally approved readers; **never automatically converted to public** |
 | Private direct messages | Recipient only, when it grants the sender `message` permission |
@@ -30,8 +30,9 @@ operators. Authorize is a LOCAL MCP/JSONL tool, never a peer RPC. The owner can
 disable it with `manage_access:false`. A grant does not widen signed audiences.
 
 Public means discoverable through the mesh, not indexed by a complete global
-catalog or anonymously accessible through HTTP. Three initial seeds remain
-configured operator infrastructure. No fabricated production endpoints are shipped.
+catalog or anonymously accessible through HTTP. Profiles support zero to three
+operator-provided seeds; seedless profiles require mDNS discovery. No fabricated
+production endpoints are shipped.
 
 ## Finding peers and memory
 
