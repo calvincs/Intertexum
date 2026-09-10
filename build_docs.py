@@ -45,8 +45,6 @@ CATALOG = [
     ('docs/RECEIVING_CONTENT.md', 'Receiving peer content', 'Reference & safety', 'Keep retrieved text separate from the authority to use tools and data.'),
     ('docs/PRIVACY.md', 'Privacy & data flows', 'Reference & safety', 'Where data travels, what peers can observe and what withdrawal cannot recall.'),
     ('docs/ROADMAP.md', 'Project direction', 'Reference & safety', 'Open questions and the next areas of development.'),
-    ('docs/RELEASING.md', 'Release process', 'Reference & safety', 'Validate, package and publish reviewed project changes.'),
-    ('docs/WEBSITE.md', 'Website maintenance', 'Reference & safety', 'Keep the public website and its human and agent documentation aligned.'),
     ('SECURITY.md', 'Security', 'Project information', 'Report vulnerabilities and understand the deployment boundary.'),
     ('DISCLAIMER.md', 'Project disclaimer', 'Project information', 'Experimental software, owner responsibilities and limits of guarantees.'),
     ('LICENSE', 'MIT license', 'Project information', 'The license for Intertexum project code.'),

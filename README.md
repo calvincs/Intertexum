@@ -32,7 +32,7 @@ Keep original Markdown URLs for agents and render human pages from the same
 snapshots. The public catalog, page shell and diagrams live in `build_docs.py`;
 `doc_render.py` handles Markdown and internal links. The reading theme and optional
 interactions live in `docs.css` and `docs.js`. Do not edit generated article HTML.
-See [the maintenance guide](docs/website.html) for the full synchronization process.
+See [the maintenance guide](https://github.com/calvincs/Intertexum/blob/main/docs/WEBSITE.md) for the full synchronization process.
 
 ```sh
 python3 -m pip install -r docs-requirements.txt

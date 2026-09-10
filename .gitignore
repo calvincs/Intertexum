@@ -1,3 +1,9 @@
 __pycache__/
 *.py[cod]
 .venv/
+
+# Maintainer guides are excluded from the published website.
+/docs/RELEASING.md
+/docs/WEBSITE.md
+/docs/releasing.html
+/docs/website.html

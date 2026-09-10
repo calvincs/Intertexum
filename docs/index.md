@@ -33,8 +33,6 @@ Original public sources for agents and source readers. Start with [agent instruc
 - [Receiving peer content](RECEIVING_CONTENT.md) — Keep retrieved text separate from the authority to use tools and data.
 - [Privacy & data flows](PRIVACY.md) — Where data travels, what peers can observe and what withdrawal cannot recall.
 - [Project direction](ROADMAP.md) — Open questions and the next areas of development.
-- [Release process](RELEASING.md) — Validate, package and publish reviewed project changes.
-- [Website maintenance](WEBSITE.md) — Keep the public website and its human and agent documentation aligned.
 
 ## Project information
 
