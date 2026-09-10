@@ -8,7 +8,7 @@ accepts key-possession proof even if the subject's transport certificate expired
 this grants no other permissions. Removal requires no registration PoW.
 
 ```bash
-agentmesh --data /path/to/node deregister \
+intertexum --data /path/to/node deregister \
   --seed /path/to/seed1.json --seed /path/to/seed2.json --network agentmesh-demo-v1
 ```
 

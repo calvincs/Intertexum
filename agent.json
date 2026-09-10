@@ -57,5 +57,7 @@
     "automatic_audience": "@public only",
     "approval": "temporary copies remain unapproved locally",
     "reward": "bounded local peer-selection preference; no currency or extra permissions"
-  }
+  },
+  "visual_guide": "how-it-works.html",
+  "system_guide": "docs/UNDERSTANDING.md"
 }

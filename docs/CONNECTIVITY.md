@@ -1,6 +1,6 @@
 # NAT and connectivity
 
-Nodes now have an optional background ICE transport using pinned aiortc 1.14.0
+Nodes now have an optional background ICE transport using pinned aiortc 1.15.0
 and aioice 0.10.2. Existing direct mutual-TLS connections continue to work.
 When TCP cannot connect, the client refreshes its approved peer's signed endpoint,
 then establishes a reliable SCTP data channel over DTLS using ICE. ICE prefers
@@ -38,9 +38,9 @@ in a JSON file like this (the placeholder is intentionally not a usable card):
 ```
 
 ```bash
-.venv/bin/agentmesh --data /path/to/node connectivity-config /path/to/config.json
-.venv/bin/agentmesh --data /path/to/node serve --host 0.0.0.0 --port 7443
-.venv/bin/agentmesh --data /path/to/node connectivity-status
+.venv/bin/intertexum --data /path/to/node connectivity-config /path/to/config.json
+.venv/bin/intertexum --data /path/to/node serve --host 0.0.0.0 --port 7443
+.venv/bin/intertexum --data /path/to/node connectivity-status
 ```
 
 Configure both peers, approve their cards and permissions on both sides, and keep
@@ -54,8 +54,9 @@ Zero to three seed cards are supported; zero requires mDNS and allows LAN-only d
 and one TURN server per node; extra servers are rejected instead of silently
 ignored. There are no default third-party servers or bundled relay credentials.
 An empty `ice_servers` list works on directly reachable LAN paths but offers no
-STUN discovery or TURN fallback. `relay_only: true` requires TURN and restricts
-locally advertised candidates to relays. Restart the listener after configuration
+STUN discovery or TURN fallback. `relay_only: true` requires TURN, restricts
+locally advertised candidates to relays, and prohibits direct TCP peer data in
+both directions. Seed signaling remains direct; endpoint metadata is still visible. Restart the listener after configuration
 or credential changes. The configuration file is written with mode 0600.
 
 ## What is detected and how recovery works
@@ -69,11 +70,13 @@ or credential changes. The configuration file is written with mode 0600.
   it to the local endpoint (null if no STUN candidate exists); this is not a full NAT taxonomy
   or a promise that every peer can reach it.
 - Interface addresses are checked every 10 seconds and seed-observed external
-  addresses every 30 seconds. Changes close old sessions, renew announcements,
+  addresses every 120 seconds. Changes close old sessions, renew announcements,
   and allow fresh candidate gathering. ICE consent checks also detect dead paths.
   Session lifetimes are bounded to 10 minutes; failed sessions are replaced.
-- Known peer announcements refresh every 30 seconds and local registration
-  renews every 5 minutes. Signed endpoint timestamps and durable local watermarks
+- Discovery advances one bounded 50-entry page every 24–36 seconds, rotating
+  seeds; local registration renews every 5 minutes. Idle mailbox polling backs
+  off to about 10 seconds with jitter; pending answers use two-second polling.
+  Failures use bounded exponential backoff and honor seed retry-after hints. Signed endpoint timestamps and durable local watermarks
   reject older updates. Offers use persistent monotonic generations plus random
   session IDs to reject replay after restart.
 - Previously used peers reconnect in the background (the smaller peer ID initiates
@@ -111,9 +114,17 @@ Bounds: 128 queued signaling envelopes per seed, 8 per origin; at most 8 session
 per node, 32 candidate lines, one incoming and one outgoing RPC per session,
 128 KiB requests, 2 MiB responses, 16 KiB transport frames and 16 MiB received
 per session. Registration work and existing seed admission limits remain in force.
-These conservative demo quotas need load testing, especially many nodes sharing
-one public IP. ICE candidates can direct UDP checks to private addresses, so only
-approved peers may initiate them; approval should not be given to arbitrary callers.
+These quotas are tested for 30 already registered idle nodes, including a shared
+NAT, with a simulated clock; larger or mixed workloads require load testing.
+Remote ICE destinations must be globally routable by default. The owner may
+provision ice_candidate_cidrs with up to 32 explicit numeric ranges for an
+authorized private network or loopback lab. mDNS-introduced peers may use only
+their signed LAN endpoint while mDNS remains enabled. Local peer/CIDR blocks
+override all exceptions, including IPv4-mapped IPv6; unspecified and multicast
+candidates are always rejected. Disallowed candidates are removed before ICE
+processing; an offer with no permitted candidates is refused.
+Public discovery alone never grants an internal-address exception.
+See [OPERATING_LIMITS.md](OPERATING_LIMITS.md) for routing/privacy semantics.
 
 ## Host the relay
 

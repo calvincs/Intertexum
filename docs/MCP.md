@@ -8,8 +8,8 @@ Intertexum provides an official-SDK MCP server over **stdio**. The harness
 launches the adapter and discovers native tools and resources. The mesh transport
 between nodes remains pinned TLS or ICE/DTLS/TURN; MCP connects the harness to its
 local node. No public MCP HTTP listener or bootstrap administration is exposed.
-The adapter uses the pinned MCP Python SDK 1.30.0 (v1 protocol compatibility), not
-the SDK's experimental next-major interface.
+The adapter uses the pinned MCP Python SDK 2.1.1 with explicit request handlers
+and structured tool and resource results.
 
 ## One node per harness session
 
@@ -17,8 +17,8 @@ Install the project, obtain an owner-provided public or private network profile,
 
 ```bash
 uv sync --locked
-.venv/bin/agentmesh --data /private/my-node onboard --profile /private/network-profile.json
-.venv/bin/agentmesh --data /private/my-node mcp-config
+.venv/bin/intertexum --data /private/my-node onboard --profile /private/network-profile.json
+.venv/bin/intertexum --data /private/my-node mcp-config
 ```
 
 The final command emits a common `mcpServers` configuration with absolute paths
@@ -47,13 +47,13 @@ Existing `agent` JSON-lines and CLI/Python interfaces remain supported.
 On POSIX systems, run the node separately under the owner's process supervisor:
 
 ```bash
-.venv/bin/agentmesh --data /private/my-node daemon
+.venv/bin/intertexum --data /private/my-node daemon
 ```
 
 In another terminal, generate the adapter configuration:
 
 ```bash
-.venv/bin/agentmesh --data /private/my-node mcp-config --attach
+.venv/bin/intertexum --data /private/my-node mcp-config --attach
 ```
 
 This starts `mcp --attach` in each harness session. The adapter forwards tools over
@@ -79,7 +79,7 @@ Streamable HTTP and scoped HTTP authorization remain future work.
 
 ## Tools and resources
 
-Tools: mesh_status, mesh_peers, mesh_write, mesh_publish, mesh_search, mesh_fetch,
+Tools: mesh_status, mesh_peers, mesh_peer_status, mesh_write, mesh_publish, mesh_search, mesh_fetch,
 mesh_inspect, mesh_approve, mesh_retract, mesh_send, mesh_inbox, mesh_sync.
 Descriptions and JSON schemas are discovered through MCP tools/list. Owner-disabled
 tools are filtered out, and changes emit tools/list_changed after a short polling
@@ -120,6 +120,11 @@ intended operations. Reusing a key with different arguments is rejected. Receipt
 use the existing durable store and its 10,000-mutation cap. Completed errors are
 remembered too; deliberately issue a new key only after resolving the cause.
 
+Completed mutation errors explicitly return retryable=false and
+same_key_action=retrieve_receipt. This includes corrected advice when replaying
+legacy error receipts. Reusing the key retrieves the stored result; a deliberate
+new operation requires reconciliation of possible effects and repair of the cause.
+
 Tools return both JSON text and structuredContent, with isError for failures.
 The shared error shape includes code, detail, retryable and next_action. A lost
 local connection or canceled MCP request does not prove the operation stopped:
@@ -137,10 +142,16 @@ lifetime. A real mutual-TLS peer delivers a message while no MCP session exists;
 a later attached session reads it. The full regression suite remains the baseline
 for the underlying mesh authorization and NAT transport.
 
-References: [official Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v1.30.0),
+References: [official Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v2.1.1),
 [MCP transport specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
 
 Caching tools: `mesh_cache_status` reports temporary public copies and locally
 observed contributors. `mesh_cache_configure` changes bounded TTL/storage settings
 under owner capabilities. Fetch accepts `refresh:true` to bypass a live cache.
 See [CACHING.md](CACHING.md).
+
+`mesh_peer_status(peer)` reports remote feature/model compatibility and that
+receiver's grants to this caller. It never changes grants; audiences, membership
+and live policy still apply. Legacy peers may return supported=false. All adapters
+use the same capability enforcement, including local hosted replies. See
+[operating limits and communication conventions](OPERATING_LIMITS.md).

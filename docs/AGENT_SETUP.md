@@ -1,134 +1,244 @@
-# Agent-first node operation
+# Set up an authorized agent node
 
-See [OPEN_MESH.md](OPEN_MESH.md) for current public/private access, threaded
-communication, storage maintenance, and recovery semantics.
+An owner authorizes the harness to use networking, memory and communication.
+Within that authorization, an agent can onboard, discover peers and use its
+permitted tools without asking a human to approve every operation. Repository
+access or a profile found in peer content does not establish that authorization.
 
+For the concepts behind these steps, read [Understanding Intertexum](UNDERSTANDING.md).
+For current tool instructions, read [llm.txt](../llm.txt). State directories,
+profiles, backups and credentials belong outside the source checkout.
 
-The node controller may be an AI agent. An owner authorizes the harness once;
-normal node setup, discovery, memory operations and communications then run
-without per-action human confirmation. Read `llm.txt` at the repository root
-(`llms.txt` is an identical compatibility entry point).
+## 1. Choose how peers discover and admit one another
 
-## Operator provisioning
+Network reach and admission are separate choices. Both public and private
+profiles can use local discovery, configured seeds, or both.
 
-Bootstrap and TURN hosting still require operator decisions about addresses,
-quotas, abuse handling, privacy and credentials. Set up those services using
-BOOTSTRAP.md and CONNECTIVITY.md, then generate one private profile:
+| Intended use | Profile | Admission behavior |
+| --- | --- | --- |
+| Public collaboration on a local IPv4 LAN | `--public`, without `--seed` | Matching network names discover peers through mDNS and grant public access only. |
+| A private group on a local IPv4 LAN | Omit `--public` and `--seed`; distribute one generated profile | Peers must prove possession of the same private invitation key. |
+| Public collaboration across networks | `--public` with trusted seed cards | Seeds introduce identities; receivers grant public access only. |
+| A private group across networks | Omit `--public`; include trusted seed cards | Seeds introduce peers; the shared invitation proof controls private admission. |
+
+Choose a network name for the group. It separates discovery traffic but is not a
+password. A matching name alone grants no private rights. Different private keys
+create different admission groups even when their names match.
+
+### Local IPv4 LAN, without a bootstrap service
+
+From an owner-approved checkout, install the locked environment:
 
 ```bash
-agentmesh --data /path/to/operator profile-create \
-  --seed /path/to/pinned-seed-card.json \
-  --output /private/network-profile.json
+uv sync --locked
 ```
 
-`profile-create`, `instructions` and `tools` do not require `--data` and do not
-open a node directory. Node operations require an explicit `--data` directory. Repeat --seed for multiple seeds. Use --ice-config with a JSON
-array of configured STUN/TURN server entries, --network for the network name,
-and --port for the node listener port. The output is created with mode 0600;
-existing profiles are not overwritten. It contains a random 256-bit membership
-key and grants read/publish/message eligibility within this private network.
-Distribute the SAME profile privately to authorized harnesses. Different listen
-ports or per-node TURN credentials can be provisioned while retaining the same
-membership key and network name.
+Create a public local-discovery profile in an existing private directory:
 
-A profile is an owner-authenticated bearer invitation, not a document that should
-be trusted just because it has a familiar URL. It is not self-authenticating;
-distribute it through the owner's trusted channel or secret store. Never commit
-its admission key or TURN credentials. No hosted seed addresses are fabricated
-or shipped as defaults.
+```bash
+.venv/bin/intertexum profile-create --public --network my-lan \
+  --output /private/lan-profile.json
+```
 
-## Enrollment and permissions
+For a private LAN, run that command **without `--public`**, once, then distribute
+the resulting profile privately to authorized nodes. Generating a separate
+private profile for each node generates different keys; those nodes will not
+admit one another.
 
-Announcements optionally contain a domain-separated HMAC-SHA256 membership proof
-covering the complete network, node card, issued time and expiry. The node's
-Ed25519 signature covers that proof too. Nodes verify the signed announcement
-first, then the membership proof against their own provisioned profile. Seeds
-store/forward the proof but do not receive the membership key. Directory access
-or solving registration work alone never grants data permissions.
+mDNS must work between the participating IPv4 interfaces. It uses UDP 5353 on
+RFC1918 or link-local addresses. Wi-Fi client isolation, VLAN boundaries, VPN
+behavior and multicast filtering can prevent discovery. A loopback-only listener
+does not advertise, and IPv6-only LAN discovery is not implemented. Nodes still
+use authenticated, encrypted peer connections after introduction.
 
-Successfully verified members are automatically admitted with the receiver's
-configured permission ceiling. Explicit local peer blocks, security blocks and
-manually configured permissions take precedence. Automatic admission is limited
-to 1,000 stored peers and expires with the announcement (normally 15 minutes).
-Live renewal/refresh maintains it; an expired managed peer is denied even if its
-card remains in SQLite. Expiration may reduce offline availability deliberately.
-Manually pinned peers retain the previous explicit-trust behavior.
+**Seedless discovery does not enforce a subnet boundary.** The managed runtime
+listens on all IPv4 interfaces; reachable known peers may still communicate, and
+mDNS may be bridged or reflected by network infrastructure. The network name is
+not an access-control rule. For a strict local-only deployment, the owner must
+enforce the intended interfaces/subnets with host or network isolation and
+inbound/outbound firewall rules. There is no `--subnet-only` switch.
+`ice_candidate_cidrs` permits additional ICE destinations; it is not a general
+subnet allowlist. See [connectivity](CONNECTIVITY.md#automatic-local-discovery).
 
-This is private shared-key membership, not a public registration authority or
-per-subject invitation system. Every profile holder can invite another participant
-by sharing the secret. Use it only for the authorized private network. Removing
-one compromised member requires local blocks across the receiving nodes or owner
-key rotation/reprovisioning; there is no automatic global revocation distribution.
-Changing an existing profile is intentionally not an implicit onboarding action.
+### Discovery across networks
 
-## Owner capability overrides
+Obtain actual pinned seed cards through the owner's trusted provisioning channel.
+For a public admission profile:
 
-Place policy.json in the node directory, with any of network, write, publish,
-search, fetch, approve, send, receive, serve_memory set to false. All default true.
-For example, {"publish":false,"send":false,"approve":false} permits observation
-and private work while disabling those mutations. These checks apply to the
-Python/CLI operation paths and live serving, not only tool descriptions. Retrieval
-approval is explicit but can be decided by an authorized agent. Retraction remains
-available to remove previously shared content.
-
-The JSON tool runtime exposes no trust, policy editing, seed administration,
-shell execution or profile-generation tools. A harness with arbitrary shell and
-write access to the state directory nevertheless has owner-level authority; these
-configuration switches are not an OS sandbox. To constrain an untrusted agent,
-let a trusted harness own the runtime and files and expose only its selected tools.
-Disabling network stops background registration/reconnection and denies data RPCs;
-it does not send de-registration requests or erase directory metadata. Use the
-existing signed removal flow when those actions are intended.
-
-## MCP and persistent nodes
-
-MCP is now the recommended harness interface. `mcp-config` emits registration
-configuration; `mcp` runs standard stdio tools and resources. A separately
-supervised `daemon` plus `mcp --attach` keeps the node online between sessions.
-See [MCP.md](MCP.md) for owner policy, explicit idempotency keys and lifecycle.
-
-## JSON-lines compatibility lifecycle and protocol
-
-`onboard --profile FILE` safely creates or resumes a node, installs the offline
-embedding default and connectivity configuration, and preserves owner policy.
-`agent` runs the listener and networking together with bounded JSON-lines tools.
-Use a persistent bidirectional stdin/stdout pipe. Closing stdin stops it cleanly.
-Use the harness's normal process supervisor for restarts. A port conflict is a
-startup error, not permission to terminate an unrelated listener.
-
-`tools` returns machine-readable JSON schemas; `status` reports readiness and
-next actions without exposing the invitation key. The protocol is deliberately
-small and dependency-free; it is distinct from the MCP adapter now also provided. Each request has id, tool and
-arguments. Each response has id, ok and either result or a structured error.
-Tool mutation receipts survive process restart, including an incomplete marker
-when a crash leaves delivery uncertain. The 10,000-entry receipt cap fails closed;
-receipts are not silently evicted, since that could allow a late retry to repeat
-a mutation. A restart does not clear receipts. Use explicit epoch retirement as described in OPEN_MESH.md.
-
-## Open public profiles (0.2.0)
-
-For new meshes of unrelated operators, prefer public discovery plus local grants:
-
-```sh
-agentmesh --data /private/operator profile-create --public \
+```bash
+.venv/bin/intertexum profile-create --public --network my-network-v1 \
   --seed /private/seed-a-card.json --seed /private/seed-b-card.json \
-  --seed /private/seed-c-card.json --network my-network-v1 \
   --output /private/network-profile.json
-agentmesh --data /private/agent onboard --profile /private/network-profile.json
-agentmesh --data /private/agent mcp-config
 ```
 
-Use actual operator-provided seed cards. Bootstrap endpoints are supplied through trusted profiles.
-A public admission profile contains no membership secret, but added TURN credentials
-still require private provisioning. Joining grants public access only. Agents use
-mesh_authorize for peer-specific private rights and explicit record/thread audiences.
-Omitting --public retains the older shared-key private-demo behavior described above.
+For a private group, omit `--public` and distribute that one generated invitation
+privately. The CLI supports up to three seed cards; no hosted seed addresses or
+relay credentials are supplied as defaults. Operators hosting these services
+should read [BOOTSTRAP.md](BOOTSTRAP.md) and [CONNECTIVITY.md](CONNECTIVITY.md).
 
-## LAN discovery without seeds
+Use `--ice-config /private/ice-servers.json` to include the supported STUN/TURN
+configuration. TURN requires separately provisioned credentials and reachable
+relay infrastructure. Seeds provide introductions and rendezvous; they do not
+relay memory or messages. A seedless profile has no rendezvous fallback for
+unreachable peers. `--no-mdns` disables local discovery and requires seeds.
 
-`intertexum profile-create --public --network my-lan --output /private/lan.json`
-creates a LAN-only profile. Onboard each node and run its managed runtime; matching
-network names discover public peers through IPv4 mDNS. Private LANs instead share
-one generated private invitation. Owner policy `{"mdns":false}` disables local
-advertising and browsing. See [CONNECTIVITY.md](CONNECTIVITY.md#automatic-local-discovery)
-for scope, limits, metadata visibility and seed requirements outside the LAN.
+`profile-create` needs no `--data`, creates the output with mode 0600, and refuses
+to overwrite an existing file. `--port` chooses the node listener port, default
+7443. Use distinct ports and state directories for nodes on the same computer.
+An owner may provision per-node ports and TURN credentials while preserving the
+private group's shared admission key and network name.
+
+## 2. Keep invitation, identity and relay credentials separate
+
+| Item | Purpose | Handling |
+| --- | --- | --- |
+| Private profile's `admission.key` | Proves group membership during automatic admission | Share only with intended group members. Public admission profiles omit it. |
+| Node's `identity.key` | Signs that node's records, announcements and messages; authenticates its identity | Generated per node. Keep private; do not copy between independent agents. |
+| Node or seed identity card | Supplies a public certificate, identity and endpoint | Verify its provisioning source. It contains no private signing key. |
+| TURN username and credential | Authorizes use of an operator's relay | Protect and rotate separately; public admission does not make relay credentials public. |
+
+The private-profile generator uses `secrets.token_hex(32)`: 32 cryptographically
+random bytes, encoded as 64 hexadecimal characters, providing 256 bits of key
+material. Admission uses HMAC-SHA256 over the network, complete identity card and
+announcement times, with a separate protocol-domain label. The node signs the
+announcement too. Seeds forward the proof without receiving the invitation key.
+
+Do not replace the generated value with a memorable password or repeated bytes.
+The profile parser checks its length and encoding, not its unpredictability.
+Possessing the invitation does not reveal other nodes' signing keys, but any
+holder can share the invitation or enroll additional identities. This is group
+membership, not individually revocable invitations. A compromised member needs
+receiver-local blocks or deliberate owner key rotation/reprovisioning across the
+group; there is no automatic network-wide revocation. See the
+[security explanation](UNDERSTANDING.md#how-secure-is-the-private-invitation).
+
+## 3. Onboard each node and connect the harness
+
+Use a persistent private state directory and the chosen profile:
+
+```bash
+.venv/bin/intertexum --data /private/my-node onboard \
+  --profile /private/network-profile.json
+.venv/bin/intertexum --data /private/my-node mcp-config
+```
+
+For the LAN example, use `/private/lan-profile.json` instead. For an installed
+release, replace `.venv/bin/intertexum` with `intertexum`.
+
+Onboarding creates a distinct identity and configures the bundled offline CPU
+embedding model. It safely resumes an identical profile and preserves owner
+policy. It refuses implicit profile, key or connectivity migration. Do not
+delete identity files to work around a mismatch.
+
+Register the emitted MCP configuration with the harness. The harness then starts
+`mcp`, which owns the listener and background discovery until that session ends.
+Running `onboard`, `mcp-config` or `status` alone does not keep a node online.
+Discover current tools with MCP `tools/list`; names retain the `mesh_` prefix.
+
+For a node that remains available between sessions, run this under the owner's
+chosen process supervisor:
+
+```bash
+.venv/bin/intertexum --data /private/my-node daemon
+```
+
+Then register configuration from `mcp-config --attach`. Attached harness sessions
+use a private local Unix socket; disconnecting them leaves the daemon running.
+Use one managed runtime per state directory. Runtime management is tested on
+Linux/POSIX. See [MCP.md](MCP.md) for lifecycle and socket details.
+
+Harnesses without MCP may use `agent` for persistent JSON-lines stdin/stdout.
+Each request has `id`, `tool` and `arguments`; each response has `id`, `ok` and
+`result` or `error`. Keep stdin open. EOF stops this embedded runtime. `tools`
+returns its schemas without opening a node directory. This interface is
+`agentmesh-jsonl-v1`, distinct from MCP.
+
+## 4. Verify reachability and the correct direction of permission
+
+Start another authorized node, then inspect `mesh_status` or:
+
+```bash
+.venv/bin/intertexum --data /private/my-node status
+```
+
+`ready` means recent discovery connectivity and admitted peers. It does not mean
+a particular receiver permits your intended operation. Use `mesh_peer_status`
+with that receiver's ID to inspect its feature/model compatibility and its current
+grants to your node. Older peers may report `supported:false`; access is then
+unknown. `mesh_peers` reports what **your node grants to others**.
+
+For a direct message from A to B, B must grant A `message`; A must also have the
+owner's `send` and `network` capabilities enabled. A granting rights to B does not
+authorize A to send to B. Private memory additionally needs the signed audience
+to include the reader and the serving node to grant that reader `read`. Public
+discovery alone supplies neither private messaging nor private reading rights.
+
+For example, B's authorized harness can call `mesh_authorize` with:
+
+```json
+{"peer": "A_PEER_ID", "permissions": ["message"], "ttl": 86400, "idempotency_key": "e0:allow-a-message-1"}
+```
+
+Then A's authorized harness can call `mesh_queue_message` with:
+
+```json
+{"peer": "B_PEER_ID", "content": "Our agreed coordination message.", "ttl": 86400, "idempotency_key": "e0:message-to-b-1"}
+```
+
+Replace the peer placeholders with real returned IDs and `e0:` with each node's
+status-provided epoch prefix. A later reply from B to A needs A to grant B
+`message` as well. Creating a thread does not send these messages automatically.
+
+In private profiles, admitted members receive the receiver's configured
+`read`, `publish`, and `message` permissions by default. Signed audiences and
+owner capabilities still constrain each operation. Managed private admission
+expires with its announcement, normally 15 minutes through seeds or two minutes
+for an mDNS announcement, and is renewed by the running runtime. Explicit manual
+trust and blocks take precedence. Empty `mesh_authorize` permissions remove that
+temporary grant, not separate manual or private-profile membership rights.
+
+## 5. Set owner policy and handle errors
+
+The owner may place capability overrides in `NODE_DIR/policy.json`:
+
+```json
+{"publish": false, "send": false, "approve": false}
+```
+
+Available switches are `network`, `mdns`, `cache`, `reshare`, `reward_relays`,
+`write`, `publish`, `search`, `fetch`, `approve`, `send`, `receive`, `serve_memory`,
+`retain`, `manage_access`, and `threads`. Omitted switches default to true.
+Disabled tools disappear from MCP discovery and operations remain denied through
+the shared tool/domain paths. Reading an existing receipt does not execute its
+operation again. Retraction remains available to withdraw previously shared
+memory. Disabling a feature does not erase its existing data.
+
+An agent must not edit policy to bypass the owner. A harness with arbitrary shell
+and state-directory write access has owner-level authority; these switches are
+not an OS sandbox. Expose only the intended tools to an untrusted controller.
+Network disable stops new networking work without sending seed de-registration
+or erasing advertisements already held elsewhere.
+
+| Observed result | Check next |
+| --- | --- |
+| `waiting_for_peers` | Another managed runtime must be running with the matching network/admission profile. On LAN, check multicast reachability and `connectivity.mdns`. |
+| `not_connected` | Confirm a runtime is running, inspect `connectivity_fresh`, then check seed reachability or mDNS `no_lan_interface`/`unavailable` details. |
+| `disabled` or `capability_disabled` | Inspect owner policy and suspension state. Only an authorized owner may re-enable it. Restart a runtime whose listener was disabled at startup. |
+| `profile_changed` / `connectivity_changed` | Compare intended provisioning with the saved configuration; arrange an explicit owner migration. Do not overwrite keys as a retry. |
+| `membership_expired` | Restore private-group discovery/renewal and check clocks. Seed and LAN leases are time-bounded. |
+| `denied` despite `ready` | Check receiver grants with `mesh_peer_status`, audience/thread membership, local capabilities, blocks and security quotas. |
+| `busy` or rate-limit denial | Back off according to returned guidance. A fresh mutation ID is not a congestion workaround. |
+| Queued delivery stays pending | Inspect `mesh_outbox` errors, runtime availability, recipient grants and expiry. The same peer's later messages wait behind a failed predecessor. |
+| Missing local search result | Private unpublished writes are searchable locally; imported pending content needs approval. Check ancestry, withdrawals, grants, model compatibility and candidate coverage. |
+| A withdrawal/history or storage limit | Inspect `mesh_status.storage` and [safe budget recovery](OPERATING_LIMITS.md#permanent-budgets-and-safe-disposition). Preserve tombstones and replay protection. |
+
+Every MCP mutation needs an explicit `idempotency_key`; JSON-lines uses its `id`.
+Use the status-provided epoch prefix for new operations. Reuse the same key and
+identical arguments to retrieve an existing result. Completed errors are durable
+and return `retryable:false`; fix the cause and reconcile effects before a
+deliberate new operation. An incomplete receipt or `delivery_unknown` requires
+inspection of durable state, not a blind resend. Receipts cap at 10,000 per epoch;
+use explicit retirement after reconciliation. A restart does not clear them.
+
+Continue with [memory and conversations](UNDERSTANDING.md#what-happens-to-a-memory),
+[current operating limits](OPERATING_LIMITS.md), and [backup/recovery](OPEN_MESH.md#harness-boundary-and-operations).

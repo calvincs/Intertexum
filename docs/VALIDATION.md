@@ -11,7 +11,7 @@ Run from a checkout:
 
 ```sh
 uv sync --locked --extra test --python 3.13
-uv run pytest -q
+uv run pytest -q -W error
 python3 scripts/check_release.py
 uv build
 python3 scripts/check_release.py --artifacts dist
@@ -20,8 +20,21 @@ python3 scripts/check_release.py --artifacts dist
 Tests use temporary directories and loopback sockets. A sandbox must permit local
 TCP/Unix sockets for integration tests. No live public mesh is needed.
 
-The pre-release baseline passed 87 tests on Linux/Python 3.13. The final release
-review adds tests for storage transaction boundaries and release output hygiene.
+The audit regressions cover owner capability enforcement through every adapter,
+private-memory search, cold search across 10,000 short records with 384-dimensional
+vectors, live authorization after cached signature verification, independent
+withdrawal budgets, long-lived origins with unrelated withdrawal history, and
+bounded authenticated peer capability responses. Delivery checks include
+same-key certificate renewal, completed-error receipts, concurrent destinations,
+per-peer ordering, and 30 queued deliveries through real TLS without self-banning.
+Connectivity checks include blocked/private ICE destinations, mapped-address and
+DNS endpoint blocks, relay-only TCP rejection, immediate shutdown, and the actual
+idle polling scheduler for 30 registered nodes using a simulated clock.
+
+Process demos separately exercise three-node memory/messaging, restart,
+withdrawal relay, and two-seed discovery with an outage. These passed alongside
+the isolated NAT lab after the audit fixes. Tests run with warnings treated as
+errors to catch background-task cleanup failures.
 Website validation is maintained separately on the gh-pages branch.
 CI reports the current count and result; historical local tool transcripts and
 machine-specific raw outputs are not distributed.
@@ -41,3 +54,8 @@ outside the source tree or under `.scratch/`.
 This demonstrates the selected test topologies, not Internet-wide compatibility,
 production resilience, or a formal security audit. Hosted WAN/CGNAT and extended
 operator-pilot validation remain release-stage work.
+
+Additional machines on the same LAN can validate process supervision, restart,
+host differences and sustained traffic. They do not reproduce independent ISP
+paths or carrier-grade NAT. Task usefulness, receiving-harness behavior and
+extended WAN deployment remain separate validation work.

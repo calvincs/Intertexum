@@ -8,4 +8,5 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: node --check sky.js
+      - run: node --check how-it-works.js
       - run: python3 check_site.py

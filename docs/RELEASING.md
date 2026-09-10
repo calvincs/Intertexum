@@ -15,6 +15,15 @@ uv build
 python3 scripts/check_release.py --artifacts dist
 ```
 
+Before publishing the separate website, synchronize and verify its documentation
+from the reviewed main checkout:
+
+```sh
+python3 scripts/sync_website_docs.py --website /path/to/intertexum-website
+python3 scripts/sync_website_docs.py --website /path/to/intertexum-website --check
+python3 /path/to/intertexum-website/check_site.py
+```
+
 Inspect `git status` and staged changes before committing. The release check
 inspects the proposed Git file set (or a clean source tree), rejects private state
 and unexpected output files, and can inspect wheel/sdist contents. This is a
