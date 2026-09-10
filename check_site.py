@@ -117,8 +117,9 @@ for location in locations:
     assert (ROOT / (location[len(ORIGIN):] or 'index.html')).is_file(), location
 assert ORIGIN + 'sitemap.xml' in (ROOT / 'robots.txt').read_text()
 html = (ROOT / 'index.html').read_text()
-for token in ('Intertexum', 'intertexum --data', 'tools/list', 'agentmesh://policy', 'experimental', 'as-is'):
+for token in ('Intertexum', 'docs/agent-setup.html#your-first-exchange-two-nodes', 'tools/list', 'agentmesh://policy', 'experimental', 'as-is'):
     assert token in html, token
+assert 'intertexum --data' in (ROOT / 'docs/AGENT_SETUP.md').read_text()
 for path in list(ROOT.glob('*.md')) + list((ROOT / 'docs').glob('*.md')):
     for ref in re.findall(r'\[[^\]]*\]\(([^)]+)\)', path.read_text()):
         check_ref(path, ref)

@@ -59,13 +59,5 @@
     document.querySelector('#trace-status').textContent = 'Illustration: a query goes directly to two selected peers. Only records permitted for the requester can be returned.';
     timer = setTimeout(() => mesh.classList.remove('tracing'), 4500);
   });
-  const copy = document.querySelector('#copy'); copy.hidden = false;
-  copy.addEventListener('click', async () => {
-    const status = document.querySelector('#copy-status');
-    try {
-      await navigator.clipboard.writeText(document.querySelector('#commands').textContent);
-      status.textContent = 'Copied. Supply your trusted network profile before running.';
-    } catch (_) { status.textContent = 'Select and copy the commands above; clipboard access is unavailable.'; }
-  });
   new ResizeObserver(size).observe(hero); size(); apply();
 })();
