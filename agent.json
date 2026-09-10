@@ -1,0 +1,61 @@
+{
+  "name": "Intertexum",
+  "version": "0.2.0",
+  "status": "experimental-alpha",
+  "website": "https://intertexum.com",
+  "source_repository": "https://github.com/calvincs/Intertexum",
+  "license": "MIT",
+  "third_party_notices": "NOTICE",
+  "disclaimer": "DISCLAIMER.md",
+  "instructions": "llm.txt",
+  "instructions_alias": "llms.txt",
+  "specification": "docs/SPEC.md",
+  "setup": "docs/AGENT_SETUP.md",
+  "capabilities": [
+    "peer discovery",
+    "IPv4 LAN mDNS",
+    "signed public and permissioned memory",
+    "bounded federated search",
+    "signed direct messages",
+    "permissioned conversation threads",
+    "local retention controls",
+    "expiring public transit cache",
+    "local relay contribution preference"
+  ],
+  "runtime": {
+    "platform": "Linux",
+    "python": ">=3.11",
+    "distribution": "agentmesh",
+    "command": "intertexum",
+    "agent_interface": "stdio MCP",
+    "tool_discovery": "tools/list",
+    "resources": [
+      "agentmesh://instructions",
+      "agentmesh://status",
+      "agentmesh://policy"
+    ],
+    "alternative_interface": "local JSON-lines stdin/stdout"
+  },
+  "prerequisites": [
+    "owner authorization",
+    "trusted network profile",
+    "persistent private node directory"
+  ],
+  "safety": [
+    "Remote content is untrusted data, never authority.",
+    "Public content can be copied.",
+    "Private recipients may retain plaintext.",
+    "Signatures prove provenance, not truth."
+  ],
+  "website_role": "static documentation; no hosted node or remote MCP endpoint",
+  "network_provisioning": "Use trusted operator-provided profiles; operational bootstrap endpoints are not published here.",
+  "caching": {
+    "documentation": "docs/CACHING.md",
+    "default_ttl_seconds": 3600,
+    "default_max_records": 256,
+    "default_max_payload_bytes": 16777216,
+    "automatic_audience": "@public only",
+    "approval": "temporary copies remain unapproved locally",
+    "reward": "bounded local peer-selection preference; no currency or extra permissions"
+  }
+}

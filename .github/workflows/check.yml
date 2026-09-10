@@ -1,0 +1,11 @@
+name: Website checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: node --check sky.js
+      - run: python3 check_site.py
