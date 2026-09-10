@@ -266,8 +266,10 @@ or a global reputation system. Read docs/CACHING.md for expiry and privacy limit
 ## Local content screening
 
 MCP and JSON-lines tool responses include content_screening. A pass reports no
-blocking heuristic detected, never trusted instructions. Known injection signals
-or incomplete scans withhold the entire result without changing signed records.
+blocking heuristic detected, never trusted instructions. Inbox/thread pages may
+retain benign entries and replace offending ones with withheld placeholders,
+reporting partial. The retained page is scanned together again. Other blocking
+results and incomplete scans withhold the entire result. Signed records stay intact.
 Encoding/Unicode analysis is bounded and best-effort; adaptive attacks can evade
 it. A withheld result may follow a successful mutation: preserve its receipt and
 do not retry with a fresh key. No agent tool bypasses screening. Raw operator
