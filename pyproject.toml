@@ -17,7 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "aioice==0.10.2",
-    "aiortc==1.14.0",
+    "aiortc==1.15.0",
     "cryptography>=50.0.1,<51",
     "fastembed==0.8.0",
     "mcp==2.1.1",
@@ -32,7 +32,7 @@ Repository = "https://github.com/calvincs/Intertexum"
 Documentation = "https://intertexum.com/llm.txt"
 
 [project.optional-dependencies]
-test = ["pytest>=8,<9"]
+test = ["pytest>=9.1.1,<10"]
 
 [project.scripts]
 intertexum = "agentmesh.cli:main"
