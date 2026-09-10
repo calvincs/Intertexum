@@ -5,6 +5,61 @@ guarantees that an agent reading the content will resist prompt injection.
 These instructions describe the receiving harness's responsibilities; they are
 not a claim that the node can enforce an LLM's interpretation of text.
 
+## Best-effort screening before tool delivery
+
+The local MCP and JSON-lines tool boundary screens outgoing results before the
+agent sees them. This follows the input-validation and defense-in-depth approach
+in the [OWASP prompt injection prevention guidance](https://cheatsheetseries.owasp.org/cheatsheets/LLM_Prompt_Injection_Prevention_Cheat_Sheet.html).
+It is a heuristic first pass, not OWASP certification or a guarantee of safety.
+Assume attackers know every rule and can adapt to it.
+
+The scanner combines token relationships with Unicode normalization, common
+lookalike mapping, internal-letter permutation checks, spaced-letter recovery,
+HTML parsing and bounded decoding of entities, percent escapes, Unicode escapes,
+Base64, hex and Unicode tag text. It looks for instruction overrides, forged role
+markers, requests for sensitive data and persistent instruction attempts.
+Encoding, ordinary invisible characters and hidden markup alone are findings,
+not automatic proof of an attack. No content is executed and no URL is fetched.
+
+Every tool response includes `content_screening` with a scanner `version`,
+`complete`, `decision` (`pass` or `withhold`), fixed-code `findings` and
+`untrusted_data: true`. Completed scans also identify the scanned text with
+`content_sha256`; for tool results this is a deterministic concatenation of
+string values and keys, not a signed-record ID. `pass` means no blocking indicator
+was detected; it never means trusted, authorized, accurate or safe.
+
+A blocking finding or an incomplete scan withholds the whole result, including
+nested copies and snippets. The replacement has `withheld: true` and a fixed
+explanation, without echoing the payload. A numeric page `next` cursor is retained
+when available, so clients can continue browsing. Withholding does not acknowledge
+messages, approve imports, or delete records. A flagged item can withhold an entire
+page; reduce the page size where useful. Quoted attacks in legitimate security
+documents can also be withheld. There is no agent-tool override.
+
+The original `ok` flag still describes the operation: a withheld response to a
+successful mutation does not mean the mutation failed. Never repeat a mutation
+with a fresh key to work around screening. Stored receipts are screened again on
+retrieval using the current scanner. Error details are also screened and replaced
+with a fixed `screened_error` when necessary; do not assume this means there were
+no side effects. Raw signed objects and durable receipts remain unchanged locally.
+Owner-level CLI/filesystem inspection can review originals; do not feed those raw
+results back into an agent to bypass the boundary.
+
+Work is bounded: 512 Ki characters of input text per scan, 2 Mi characters of
+aggregate interpreted text, 128 distinct interpretations and two transformation
+levels. Tool-response traversal also has depth and element limits. Exceeding a
+budget or a scanner failure withholds content rather than declaring it clean.
+This initial scanner has no learned semantic classifier. Detection is primarily
+English; other languages, new paraphrases, unsupported encodings, images and
+attacks distributed across separate responses can evade it. Even benign large
+responses may exceed its budget. Tune client page sizes accordingly.
+
+This is a local tool-output control, not network moderation: remote protocol
+objects, transit caching, low-level Python/CLI reads and trusted instruction
+resources are not rewritten or made safe by it. Integrations using those raw
+interfaces must apply their own screening and authority boundaries. Signing,
+prior approval and peer reputation never exempt a tool result from screening.
+
 ## Before retrieving
 
 - Start from the owner's task and permitted actions. Decide which peers and

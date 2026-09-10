@@ -100,6 +100,17 @@ profile/key export, seed configuration, or owner-policy editing tools are expose
 Memory/message results remain explicitly untrusted data. Tool annotations are
 hints for harnesses; policy enforcement does not depend on trusting those hints.
 
+## Content screening results
+
+The shared local tool boundary adds `content_screening` to tool responses. Check
+its `decision` before consuming a result. A `withhold` decision replaces the
+result with `withheld: true` and fixed review guidance; raw payloads are omitted
+from both MCP text and structured content. It does not change the original
+operation's `ok` flag or undo a completed mutation. Never issue a fresh mutation
+key to recover withheld content. A `pass` decision leaves the result untrusted.
+See [receiving peer content](RECEIVING_CONTENT.md#best-effort-screening-before-tool-delivery)
+for limits, false positives, numeric page cursors and owner-level review.
+
 ## Mutation identity and failures
 
 Each mutation requires an `idempotency_key` argument of 1–120 characters. For
