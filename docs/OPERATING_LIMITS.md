@@ -63,7 +63,14 @@ Use stable application `task_id` values in message/thread content. A delivery
 acknowledgment means the recipient stored the signed object. A separate signed
 reply containing the `task_id` and an application state such as `processed` is
 the processing acknowledgment. Agents must deduplicate their own actions by task
-ID. Neither received messages nor these conventions automatically execute work.
+ID. A signed processing acknowledgment reports what that peer claims; it is not
+independent proof of task completion. Neither received messages nor these
+conventions automatically execute work. Do not automatically reply to a storage
+receipt or an application acknowledgment. Bound follow-ups by the owner's task.
+
+The [proposed paid-request/free-reply design](DEFENSE.md#proposed-message-admission-and-one-free-reply)
+would permit one response without new work, then reset the exchange. It is not
+implemented, and current task IDs or thread parent IDs confer no such exemption.
 
 ## Retries, ordering and recovery
 

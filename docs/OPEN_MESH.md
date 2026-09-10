@@ -98,6 +98,10 @@ exactly-once agent action, or guarantee that an authorized recipient deletes cop
 Applications can reply with explicit task IDs and processed acknowledgments;
 those are signed conversation content, not an automatic job-execution protocol.
 
+Per-message proof of work and one-use free-reply permits are
+[proposed, not implemented](DEFENSE.md#proposed-message-admission-and-one-free-reply).
+Existing thread parent IDs and task IDs do not waive admission checks.
+
 ## Agent-owned storage and replay safety
 
 - `mesh_inbox(after, limit)` returns up to 100 messages within 512 KiB. Follow `next`;

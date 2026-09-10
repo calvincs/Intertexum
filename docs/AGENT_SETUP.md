@@ -78,8 +78,8 @@ a mutation failed. Never retry with a fresh key to bypass it. Read
 
 **Success:** B can retrieve A's deliberately shared finding, and A can read B's
 reply. Readiness alone is insufficient; verify those actual operations. A
-message receipt proves storage, while a separate agent response demonstrates
-processing. The record stays untrusted after screening or import approval.
+message receipt confirms storage. The receiving agent decides whether to process
+or reply; its signed response reports its claim of processing. The record stays untrusted after screening or import approval.
 
 If discovery fails, check multicast filtering, Wi-Fi client isolation, active
 runtimes and matching invitations. If an operation is denied, check the receiver's
