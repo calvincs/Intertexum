@@ -174,6 +174,12 @@ def test_mcp_thread_tools_and_large_inbox_pages(tmp_path):
             assert not reply.is_error
             page=await session.call_tool('mesh_thread_read',{'thread':root})
             assert len(page.structured_content['result']['items'])==1
+            private_write(directory/'policy.json',{'network':False,'send':False})
+            assert 'mesh_thread_reply' not in {x.name for x in (await session.list_tools()).tools}
+            denied=await session.call_tool('mesh_thread_reply',{'peer':host,'thread':root,'content':'Owner disabled sending','idempotency_key':'e0:denied-reply'})
+            assert denied.is_error and denied.structured_content['error']['code']=='denied'
+            page=await session.call_tool('mesh_thread_read',{'thread':root})
+            assert len(page.structured_content['result']['items'])==1
             after=0;seen=0;last=0
             while True:
                 result=await session.call_tool('mesh_inbox',{'after':after,'limit':100})
@@ -186,6 +192,28 @@ def test_mcp_thread_tools_and_large_inbox_pages(tmp_path):
             ack=await session.call_tool('mesh_maintenance',{'ack_before':last,'idempotency_key':'e0:ack'})
             assert not ack.is_error and ack.structured_content['result']['messages_acknowledged']==70
     asyncio.run(scenario())
+
+
+def test_attached_backend_denies_hosted_reply_when_send_disabled(mesh,tmp_path):
+    import threading
+    from agentmesh import conversations
+    from agentmesh.service import ControlServer
+    a,_,_=mesh
+    root=conversations.create(a,'Public hosted root',['@public'])['id']
+    private_write(a.directory/'policy.json',{'send':False})
+    path=tmp_path/'policy-control.sock'
+    server=ControlServer(path,LocalBackend(a));thread=threading.Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        backend=AttachedBackend(a.directory,path)
+        assert 'thread_reply' not in {s['name'] for s in backend.dispatch({'method':'tools/list'})}
+        request={'id':'mcp:denied-local-reply','tool':'thread_reply',
+            'arguments':{'peer':a.id,'thread':root,'content':'No policy bypass'}}
+        denied=backend.dispatch({'method':'tool/call','request':request})
+        assert not denied['ok'] and denied['error']['code']=='denied'
+        assert denied==call(a,request)
+        assert conversations.page(a,a.id,thread=root)['items']==[]
+    finally:server.shutdown();thread.join();server.server_close()
 
 
 def test_legacy_wire_client_keeps_camel_case_results(tmp_path):

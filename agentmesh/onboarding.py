@@ -72,7 +72,7 @@ def setup(directory, value):
         private_write(directory/'network-profile.json',value)
         private_write(existing,value['connectivity'])
         return {'id':node.id,'configured':True,'resumed':old is not None,
-                'next_action':'run agentmesh --data '+str(directory)+' mcp',
+                'next_action':'run intertexum --data '+str(directory)+' mcp',
                 'capabilities':policy(node)}
     finally:node.close()
 

@@ -133,3 +133,15 @@ def test_expensive_search_charges_cpu_debt(tmp_path,monkeypatch):
         with pytest.raises(Denied,match='rate'):
             guard.operation('192.0.2.1','a'*64,'search','data')
     finally:guard.close()
+
+
+def test_bootstrap_congestion_does_not_ban_shared_nat(tmp_path):
+    guard=Defense(tmp_path,clock=lambda:1000.)
+    try:
+        for _ in range(40):guard.connection('192.0.2.1','bootstrap')
+        for _ in range(40):
+            try:guard.operation('192.0.2.1','','connectivity','bootstrap')
+            except Denied:pass
+        assert not guard.blocked(source='192.0.2.1')
+        assert guard.failures=={}
+    finally:guard.close()

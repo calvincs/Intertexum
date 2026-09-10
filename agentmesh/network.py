@@ -6,6 +6,7 @@ with deadlines, so an idle plaintext connection cannot block the accept loop.
 from __future__ import annotations
 
 import socket
+import ipaddress
 import socketserver
 import ssl
 import struct
@@ -19,6 +20,63 @@ from cryptography.hazmat.primitives import serialization
 from .crypto import Invalid, Denied, MAX_WIRE_BYTES, canonical, decode, certificate, public_id
 
 TIMEOUT = 5
+
+
+def relay_only(node):
+    manager = node.connectivity
+    if manager is not None:
+        return manager.config.get('relay_only', False)
+    from .connectivity import load_config
+    config = load_config(node)
+    return bool(config and config['relay_only'])
+
+
+def connectivity_manager(node, config):
+    # Independent delivery destinations may discover the missing manager together.
+    # Only its construction is serialized; no lock is held across network work.
+    with node.lock:
+        if node.connectivity is None:
+            from .connectivity import Connectivity
+            node.connectivity = Connectivity(node, config, passive=False).start()
+        return node.connectivity
+
+
+def endpoint_blocked(node, peer, host):
+    from .connectivity import candidate_address
+    address = ipaddress.ip_address(host)
+    normalized = candidate_address(address)
+    addresses = {address, normalized}
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.sixtofour:
+            addresses.add(address.sixtofour)
+        addresses.update(address.teredo or ())
+    return any(node.defense.blocked(source=str(value), peer=peer) for value in addresses)
+
+
+def peer_socket(node, peer, host, port):
+    """Resolve once and filter numeric destinations before any TCP connection."""
+    addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    permitted = [item for item in addresses[:32] if not endpoint_blocked(node, peer, item[4][0])]
+    if not permitted:
+        raise Denied('peer endpoint blocked by local policy')
+    last_error = OSError('no reachable peer endpoint')
+    deadline = time.monotonic() + TIMEOUT
+    for family, kind, protocol, _, address in permitted:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('peer connection deadline exceeded')
+        sock = socket.socket(family, kind, protocol)
+        try:
+            sock.settimeout(remaining)
+            sock.connect(address)
+            return sock
+        except OSError as exc:
+            last_error = exc
+            sock.close()
+        except BaseException:
+            sock.close()
+            raise
+    raise last_error
 
 
 def _read_exact(sock, count, deadline):
@@ -82,6 +140,9 @@ def dispatch(node, peer_id, request):
     if not isinstance(request, dict) or set(request) != {"op", "args"} or not isinstance(request["args"], dict):
         raise Invalid("invalid request schema")
     op, args = request["op"], request["args"]
+    if op == 'capabilities' and not args:
+        from .peer_status import describe
+        return describe(node, peer_id)
     if op=='peer_view' and set(args)<={'after','limit'}:
         from .openmesh import peer_view
         return peer_view(node,peer_id,**args)
@@ -116,6 +177,8 @@ class _Handler(socketserver.BaseRequestHandler):
                 peer_id = authenticate(conn, node)
                 try:
                     request = receive(conn,128*1024)
+                    if relay_only(node):
+                        raise Denied('relay-only policy requires the encrypted relay transport')
                     op = request.get('op') if isinstance(request,dict) else None
                     node.defense.operation(source,peer_id,op,'data')
                     with node.defense.search(source,peer_id) if op=='search' else nullcontext():
@@ -194,16 +257,24 @@ class Client:
         self.node, self.peer_id = node, peer_id
 
     def _direct(self, op, args):
+        self.node.capability('network')
+        if relay_only(self.node):
+            raise Denied('relay-only policy prohibits direct TCP peer requests')
         card = self.node.peer(self.peer_id)["card"]
+        if self.node.defense.blocked(peer=self.peer_id):
+            raise Denied('peer endpoint blocked by local policy')
         ctx = context(self.node, server=False, peer_pem=card["certificate"])
-        with socket.create_connection((card["host"], card["port"]), timeout=TIMEOUT) as raw:
+        with peer_socket(self.node, self.peer_id, card['host'], card['port']) as raw:
+            if endpoint_blocked(self.node, self.peer_id, raw.getpeername()[0]):
+                raise Denied('peer endpoint blocked by local policy')
             with ctx.wrap_socket(raw, server_hostname=None) as conn:
                 authenticate(conn, self.node, self.peer_id)
                 try:
                     transmit(conn, {"op": op, "args": args})
                     response = receive(conn)
-                except OSError:
-                    if op=='message':raise Denied('delivery status unknown; inspect recipient inbox before resending')
+                except (OSError, Invalid):
+                    if op in ('message', 'thread_post'):
+                        raise Denied('delivery status unknown; inspect recipient state before another operation')
                     raise
         return response
 
@@ -213,7 +284,15 @@ class Client:
         if op=="get":self.node.capability("fetch")
         if op in ("message","thread_post"):self.node.capability("send")
         if op in ("threads","thread_post"):self.node.capability("threads")
+        self.node.peer(self.peer_id)
+        if self.node.defense.blocked(peer=self.peer_id):
+            raise Denied('peer blocked by local policy')
         manager=self.node.connectivity
+        if relay_only(self.node):
+            if manager is None:
+                from .connectivity import load_config
+                manager = connectivity_manager(self.node, load_config(self.node))
+            return self._result(manager.request(self.peer_id, op, args))
         if manager and manager.state['peers'].get(self.peer_id,{}).get('path') in ('direct-ice','relay'):
             response=manager.request(self.peer_id,op,args)
             return self._result(response)
@@ -222,13 +301,10 @@ class Client:
         except Denied:
             raise
         except OSError:
-            from .connectivity import Connectivity, load_config
+            from .connectivity import load_config
             config=load_config(self.node)
             if config is None:raise
-            manager=self.node.connectivity
-            if manager is None:
-                manager=Connectivity(self.node,config,passive=False).start()
-                self.node.connectivity=manager
+            manager=connectivity_manager(self.node,config)
             future=__import__('asyncio').run_coroutine_threadsafe(manager.refresh(),manager.loop)
             try:future.result(timeout=20)
             except TimeoutError:future.cancel()
@@ -265,6 +341,19 @@ class Client:
         except (KeyError, TypeError) as exc:
             raise Invalid("malformed search response") from exc
 
+    def peer_status(self):
+        from .peer_status import checked
+        try:
+            result = self.request('capabilities')
+        except Invalid as exc:
+            if 'unsupported operation' not in str(exc):
+                raise
+            return {'peer': self.peer_id, 'supported': False,
+                    'untrusted_data': True, 'permissions': None, 'operations': None,
+                    'next_action': 'Peer uses an older protocol. Obtain compatibility and grants '
+                        'through the owner-authorized provisioning channel; do not assume permission.'}
+        return checked(result, self.node, self.peer_id)
+
     def fetch(self, rid, *, refresh=False):
         if type(refresh) is not bool:raise Invalid('refresh must be boolean')
         self.node.capability('network');self.node.capability('fetch')
@@ -272,38 +361,63 @@ class Client:
         if self.node.defense.blocked(peer=self.peer_id):raise Denied('peer blocked')
         from .cache import hit,remember,credit
         if not refresh and hit(self.node,rid):return rid
-        self.sync_retractions()
         obj = self.request("get", id=rid)
         if not isinstance(obj, dict) or obj.get("id") != rid:
             raise Invalid("peer returned the wrong record")
+        body = self.node._verified_record(obj)
+        if not self.node._visible(body, self.node.id):
+            raise Denied('remote record outside audience')
+        # A fetch reconciles the requested signed record and existing local
+        # records before import, without adopting an unrelated lifetime history.
+        self.sync_retractions(requested_record=obj)
         with self.node.transaction():
             remember(self.node,obj)
             result=self.node.ingest(obj)
             credit(self.node,self.peer_id,obj)
             return result
 
-    def sync_retractions(self):
-        after, count, unknown = "", 0, 0
+    def sync_retractions(self, *, requested_record=None):
+        after, count, unknown, unrelated = "", 0, 0, 0
+        requested = None
+        if requested_record is not None:
+            body = self.node._verified_record(requested_record)
+            if not self.node._visible(body, self.node.id):
+                raise Denied('remote record outside audience')
+            requested = (requested_record['id'], body['origin'])
         # Each pass starts at the beginning; persistent tombstones are idempotent.
         # A bounded sweep cannot claim global freshness or partition-time safety.
-        for _ in range(21):
+        for page_number in range(61):
+            if page_number:
+                # Paginated sync must fit the default per-source connection budget.
+                time.sleep(.5)
             page = self.request("retractions", after=after)
-            if not isinstance(page, dict) or set(page) != {"events", "next"} or not isinstance(page["events"], list):
+            if (not isinstance(page, dict) or set(page) != {"events", "next"}
+                    or not isinstance(page["events"], list) or len(page['events']) > 500):
                 raise Invalid("invalid retraction page")
             for event in page["events"]:
                 try:
                     origin = event["body"]["origin"]
+                    target = event['body']['target']
+                    if requested is not None and (target, origin) != requested:
+                        with self.node.lock:
+                            row = self.node._row(target) if isinstance(target, str) else None
+                            relevant = row is not None and decode(row['wire'].encode())['body']['origin'] == origin
+                        if not relevant:
+                            unrelated += 1
+                            continue
                     self.node._key(origin, historical=True)
                 except Denied:
                     unknown += 1
                     continue
                 except (KeyError, TypeError) as exc:
                     raise Invalid("invalid retraction event") from exc
-                self.node.ingest_retraction(event)
+                self.node.ingest_retraction(event, supplier=self.peer_id, requested_record=requested_record)
                 count += 1
             cursor = page["next"]
             if cursor is None:
                 return {"verified_events": count, "unknown_origins_skipped": unknown,
+                        "unrelated_events_skipped": unrelated,
+                        "scope": 'requested_and_stored_records' if requested is not None else 'bounded_peer_history',
                         "network_complete": False}
             if not isinstance(cursor, str) or cursor <= after:
                 raise Invalid("non-advancing retraction cursor")

@@ -240,6 +240,7 @@ class _Handler(socketserver.BaseRequestHandler):
                     response = {'ok':True,'result':result}
                 except Denied as exc:
                     response = {'ok':False,'detail':str(exc)}
+                    if hasattr(exc,'retry_after'):response['retry_after']=exc.retry_after
                 except (Invalid,TypeError,KeyError) as exc:
                     defense.failure(source,event='invalid_bootstrap')
                     response = {'ok':False,'detail':str(exc)}
@@ -292,6 +293,10 @@ class BootstrapClient:
         if not isinstance(response,dict) or type(response.get('ok')) is not bool:
             raise Invalid('invalid seed response')
         if not response['ok']:
+            retry=response.get('retry_after')
+            if type(retry) in (int,float) and 0<retry<=3600:
+                from .defense import RateLimited
+                raise RateLimited(response.get('detail','seed denied request'),retry)
             raise Denied(response.get('detail','seed denied request'))
         if 'result' not in response:
             raise Invalid('seed response is missing its result')
@@ -330,13 +335,9 @@ class BootstrapClient:
     def discover(self):
         after, found = '', {}
         for _ in range(21):
-            result = self.request('discover',after=after)
-            if (not isinstance(result,dict) or set(result) != {'announcements','next','network'}
-                    or result['network'] != self.network or not isinstance(result['announcements'],list)
-                    or len(result['announcements'])>50):
-                raise Invalid('invalid discovery page')
+            result = self.discover_page(after)
             for obj in result['announcements']:
-                body = check_announcement(obj,self.network)
+                body = obj['body']
                 found[body['card']['id']] = obj
             cursor = result['next']
             if cursor is None:
@@ -345,3 +346,19 @@ class BootstrapClient:
                 raise Invalid('non-advancing discovery cursor')
             after = cursor
         raise Invalid('discovery exceeds directory limit')
+
+    def discover_page(self, after=''):
+        """One bounded page; runtimes pace and rotate discovery between seeds."""
+        result=self.request('discover',after=after)
+        if (not isinstance(result,dict) or set(result) != {'announcements','next','network'}
+                or result['network'] != self.network or not isinstance(result['announcements'],list)
+                or len(result['announcements'])>50):raise Invalid('invalid discovery page')
+        previous=after
+        for obj in result['announcements']:
+            body=check_announcement(obj,self.network)
+            if body['card']['id']<=previous:raise Invalid('non-advancing discovery entry')
+            previous=body['card']['id']
+        cursor=result['next']
+        if cursor is not None and (not valid_id(cursor) or cursor<=after or cursor<previous):
+            raise Invalid('non-advancing discovery cursor')
+        return result

@@ -130,6 +130,103 @@ def test_durable_outbox_offline_then_tls_delivery_and_threads(mesh):
     finally:server.shutdown();thread.join();server.server_close()
 
 
+def test_queued_thread_replies_survive_same_key_renewal_and_keep_live_acl(mesh):
+    from agentmesh.operations import renew
+    a,b,d=mesh
+    root=c.create(a,'private renewal conversation',[b.id])['id']
+    acknowledged=c._body(b,'reply','acknowledgement was lost',thread=root,parent=root)
+    waiting=c._body(b,'reply','first delivery after renewal',thread=root,parent=acknowledged['id'])
+    assert c.accept(a,acknowledged,b.id)['id']==acknowledged['id']
+    renew(b.directory)
+    renewed=Node(b.directory)
+    try:
+        assert renewed.id==b.id and renewed.identity.pem!=b.identity.pem
+        a.trust(renewed.card(port=7443),['read','message'])
+        assert c.accept(a,acknowledged,b.id)['id']==acknowledged['id']
+        assert c.accept(a,waiting,b.id)['id']==waiting['id']
+        assert len(c.page(a,a.id,thread=root)['items'])==2
+        forged=c._body(d,'reply','different signing key',thread=root,parent=root)
+        with pytest.raises(Invalid,match='sender mismatch'):c.accept(a,forged,b.id)
+        a.trust(renewed.card(port=7443),['read'])
+        with pytest.raises(Denied):c.accept(a,acknowledged,b.id)
+        a.block(b.id)
+        with pytest.raises(Denied):c.accept(a,waiting,b.id)
+    finally:renewed.close()
+
+
+def test_delivery_worker_isolates_slow_peers_and_preserves_fifo(mesh,monkeypatch):
+    import threading
+    a,b,d=mesh
+    release=threading.Event();slow_started=threading.Event();healthy_done=threading.Event()
+    guard=threading.Lock();calls=[];inflight=set();peak=0
+    slow=[c.queue_message(a,b.id,'slow '+str(i))['id'] for i in range(2)]
+    healthy=[c.queue_message(a,d.id,'healthy '+str(i))['id'] for i in range(5)]
+    monkeypatch.setattr(c,'DELIVERY_CONCURRENCY',2)
+    def request(client,op,**args):
+        nonlocal peak
+        mid=args['message']['id']
+        with guard:
+            assert client.peer_id not in inflight
+            inflight.add(client.peer_id);peak=max(peak,len(inflight));calls.append(mid)
+        try:
+            if client.peer_id==b.id:
+                slow_started.set();assert release.wait(5)
+            if mid==healthy[-1]:healthy_done.set()
+            return {'id':mid}
+        finally:
+            with guard:inflight.remove(client.peer_id)
+    monkeypatch.setattr(Client,'request',request)
+    worker=c.DeliveryWorker(a);worker.start()
+    try:
+        assert slow_started.wait(2)
+        assert healthy_done.wait(3), 'healthy peer was blocked behind an unreachable peer'
+        assert [mid for mid in calls if mid in healthy]==healthy
+        assert [mid for mid in calls if mid in slow]==slow[:1]
+        assert peak==2
+    finally:release.set();worker.close()
+    assert not worker.thread.is_alive() and not a._delivery_peers
+
+
+def test_delivery_backoff_keeps_causal_successor_behind_parent(mesh,monkeypatch):
+    a,b,d=mesh
+    root=c.create(b,'causal thread',['@public'])['id']
+    parent=c.reply(a,b.id,root,'parent')['id']
+    child=c.reply(a,b.id,root,'child',parent=parent)['id']
+    healthy=c.queue_message(a,d.id,'another peer')['id']
+    attempted=[]
+    def request(client,op,**args):
+        obj=args['post'] if op=='thread_post' else args['message']
+        attempted.append(obj['id'])
+        if obj['id']==parent:raise OSError('offline')
+        return {'id':obj['id']}
+    monkeypatch.setattr(Client,'request',request)
+    c.deliver(a);c.deliver(a);c.deliver(a)
+    assert attempted==[parent,healthy] and child not in attempted
+    a.db.execute('UPDATE outbox SET next=0 WHERE id=?',(parent,))
+    monkeypatch.setattr(Client,'request',lambda client,op,**args:{'id':args['post']['id']})
+    c.deliver(a);c.deliver(a)
+    assert {x['state'] for x in c.deliveries(a)['items']}=={'delivered'}
+
+
+def test_delivery_worker_drains_past_tls_burst_without_receiver_ban(mesh):
+    a,b,_=mesh
+    server=Server(b);thread=server.start()
+    a.trust(b.card(port=server.server_address[1]),['read','publish','message'])
+    queued=[c.queue_message(a,b.id,'paced message '+str(i),ttl=60)['id'] for i in range(30)]
+    worker=c.DeliveryWorker(a);worker.start()
+    try:
+        deadline=time.monotonic()+25
+        while time.monotonic()<deadline:
+            items=c.deliveries(a)['items']
+            if len(items)==30 and all(x['state']=='delivered' for x in items):break
+            time.sleep(.1)
+        else:raise AssertionError(items)
+        assert all(x['attempts']==1 for x in items)
+        assert [m['message']['id'] for m in b.inbox()]==queued
+        assert not b.defense.blocked(source='127.0.0.1',peer=a.id)
+    finally:worker.close();server.shutdown();thread.join();server.server_close()
+
+
 def test_offline_backup_restore_renewal_and_lock(mesh,tmp_path):
     from agentmesh.operations import backup,restore,renew
     from agentmesh.service import runtime_lock

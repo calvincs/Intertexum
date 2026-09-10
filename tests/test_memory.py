@@ -12,12 +12,14 @@ def test_private_write_is_durable_and_never_served(mesh):
     a, b, _ = mesh
     rid = a.write_private("private plan", [1, 0, 0])
     assert a.inspect(rid)["record"]["body"]["text"] == "private plan"
+    assert a.search(a.id, query_text="private")["results"][0]["record"]["id"] == rid
     assert a.search(b.id, query_text="private")["results"] == []
     with pytest.raises(Denied):
         a.get(rid, b.id)
     reopened = Node(a.directory)
     try:
         assert reopened.inspect(rid)["state"] == "private"
+        assert reopened.search(reopened.id, query_text="private")["results"][0]["record"]["id"] == rid
     finally:
         reopened.close()
 
@@ -259,3 +261,197 @@ def test_read_permission_is_independent_from_message_permission(mesh):
     wrong["body"]["recipient"] = b.id
     with pytest.raises(Invalid):
         a.receive_message(wrong, b.id)
+
+
+def test_private_draft_does_not_duplicate_or_resurrect_a_publication(mesh):
+    a, _, _ = mesh
+    draft = a.write_private('unique draft', [1, 0, 0])
+    shared = a.publish(draft, audience=['@public'])
+    assert [r['record']['id'] for r in a.search(a.id, query_text='unique')['results']] == [shared]
+    a.retract(shared)
+    assert a.search(a.id, query_text='unique')['results'] == []
+    assert a.inspect(draft)['state'] == 'private'
+    # An old database has no markers; reconstruct them from its signed copies.
+    a.db.execute('DELETE FROM published_private')
+    reopened = Node(a.directory)
+    try:
+        assert reopened.search(reopened.id, query_text='unique')['results'] == []
+    finally:
+        reopened.close()
+
+
+def test_unknown_withdrawals_have_origin_supplier_and_local_reserves(mesh, monkeypatch):
+    a, b, c = mesh
+    monkeypatch.setattr('agentmesh.node.MAX_UNKNOWN_RETRACTIONS_PER_ORIGIN', 2)
+    monkeypatch.setattr('agentmesh.node.MAX_UNKNOWN_RETRACTIONS_PER_SUPPLIER', 3)
+    own = publish(a, 'owner withdrawal')
+    known = publish(b, 'known withdrawal')
+    a.ingest(b.get(known, a.id))
+    def withdrawal(node, target):
+        return sign(node.identity.key, RETRACT_DOMAIN, {'version': 1, 'origin': node.id, 'target': target})
+    events = [withdrawal(b, f'{i:064x}') for i in range(3)]
+    a.ingest_retraction(events[0], supplier=c.id)
+    a.ingest_retraction(events[1], supplier=c.id)
+    with pytest.raises(Denied, match='origin/supplier quota'):
+        a.ingest_retraction(events[2], supplier=c.id)
+    a.ingest_retraction(withdrawal(c, '3'*64), supplier=c.id)
+    with pytest.raises(Denied, match='origin/supplier quota'):
+        a.ingest_retraction(withdrawal(c, '4'*64), supplier=c.id)
+    # Existing tombstones remain idempotent even after a supplier/origin fills up.
+    a.ingest_retraction(events[0], supplier=c.id)
+    a.ingest_retraction(b.retract(known), supplier=c.id)
+    a.retract(own)
+    assert a._withdrawn(known, b.id) and a._withdrawn(own, a.id)
+    from agentmesh.lifecycle import capacity
+    assert capacity(a)['retractions']['counts'] == {'local': 1, 'stored': 1, 'unknown': 3}
+
+
+def test_legacy_foreign_quota_exhaustion_does_not_block_local_withdrawal(mesh, monkeypatch):
+    a, b, _ = mesh
+    monkeypatch.setattr('agentmesh.node.MAX_EVENTS', 3)
+    rid = publish(a, 'can still withdraw')
+    for i in range(3):
+        body = {'version': 1, 'origin': b.id, 'target': f'{i:064x}'}
+        obj = sign(b.identity.key, RETRACT_DOMAIN, body)
+        a.db.execute('INSERT INTO retractions VALUES(?,?,?,?)',
+                     (obj['id'], b.id, body['target'], canonical(obj).decode()))
+    reopened = Node(a.directory)
+    try:
+        reopened.retract(rid)
+        assert reopened.db.execute('SELECT count(*) FROM retractions').fetchone()[0] == 4
+        assert reopened._withdrawn(rid, a.id)
+    finally:
+        reopened.close()
+
+
+def test_requested_withdrawal_uses_reserve_without_storing_record(mesh, monkeypatch):
+    a, b, c = mesh
+    monkeypatch.setattr('agentmesh.node.MAX_UNKNOWN_RETRACTIONS_PER_ORIGIN', 1)
+    unknown = sign(a.identity.key, RETRACT_DOMAIN,
+                   {'version': 1, 'origin': a.id, 'target': '0'*64})
+    b.ingest_retraction(unknown, supplier=c.id)
+    rid = publish(a, 'withdrawn before requested import', audience=['@public'])
+    requested = a.get(rid, b.id)
+    event = a.retract(rid)
+    with pytest.raises(Denied, match='origin/supplier quota'):
+        b.ingest_retraction(event, supplier=c.id)
+    b.ingest_retraction(event, supplier=c.id, requested_record=requested)
+    assert b._row(rid) is None
+    assert b._withdrawn(rid, a.id)
+    assert b.db.execute('SELECT allocation FROM retraction_sources WHERE id=?', (event['id'],)).fetchone()[0] == 'stored'
+    with pytest.raises(Denied, match='withdrawn'):
+        b.ingest(requested)
+    b.trust(c.card(port=7443), ['public'])
+    assert event in b.retractions(c.id)['events']
+
+
+def test_requested_withdrawal_reserve_requires_verified_visible_target(mesh, monkeypatch):
+    a, b, c = mesh
+    monkeypatch.setattr('agentmesh.node.MAX_UNKNOWN_RETRACTIONS_PER_ORIGIN', 1)
+    b.ingest_retraction(sign(a.identity.key, RETRACT_DOMAIN,
+                            {'version': 1, 'origin': a.id, 'target': '0'*64}))
+    rid = publish(a, 'requested public memory', audience=['@public'])
+    requested = a.get(rid, b.id)
+    event = a.retract(rid)
+    forged = deepcopy(requested)
+    forged['body']['text'] = 'forged'
+    with pytest.raises(Invalid):
+        b.ingest_retraction(event, requested_record=forged)
+    with pytest.raises(Denied, match='origin/supplier quota'):
+        b.ingest_retraction(event, requested_record={'id': 'f'*64})
+    b.trust(a.card(port=7443), ['read'])
+    with pytest.raises(Denied):
+        b.ingest_retraction(event, requested_record=requested)
+    b.trust(a.card(port=7443), ['read', 'publish'])
+    private = publish(a, 'outside requester audience', audience=[c.id])
+    secret = a.get(private, c.id)
+    with pytest.raises(Denied, match='outside the local audience'):
+        b.ingest_retraction(a.retract(private), requested_record=secret)
+    assert b.db.execute('SELECT count(*) FROM retractions').fetchone()[0] == 1
+    assert b.inventory() == []
+
+
+def test_search_index_and_signature_cache_recheck_live_grants_and_ancestry(mesh):
+    from agentmesh.openmesh import authorize
+    a, b, c = mesh
+    parent = publish(a, 'grant protected research', audience=[b.id, c.id])
+    b.ingest(a.get(parent, b.id)); b.approve(parent)
+    child = publish(b, 'derived research', parents=[parent], audience=[b.id, c.id])
+    b.trust(a.card(port=7443), ['public'])
+    b.trust(c.card(port=7443), ['public'])
+    authorize(b, a.id, permissions=['publish'])
+    authorize(b, c.id, permissions=['read'])
+    assert len(b.search(c.id, query_text='research')['results']) == 2
+    assert b.get(child, c.id)['id'] == child
+    authorize(b, a.id, permissions=[])
+    assert b.search(c.id, query_text='research')['results'] == []
+    with pytest.raises(Denied):
+        b.get(child, c.id)
+    authorize(b, a.id, permissions=['publish'])
+    assert len(b.search(c.id, query_text='research')['results']) == 2
+    b.db.execute('UPDATE grants SET expires=0 WHERE peer=?', (c.id,))
+    assert b.search(c.id, query_text='research')['results'] == []
+    authorize(b, c.id, permissions=['read'])
+    b.ingest_retraction(a.retract(parent))
+    assert b.search(c.id, query_text='research')['results'] == []
+
+
+def test_search_index_tracks_other_connections_and_rolled_back_mutations(mesh):
+    a, b, _ = mesh
+    first = publish(a, 'initial searchable')
+    a.search(b.id, query_text='searchable')
+    operator = Node(a.directory)
+    try:
+        second = publish(operator, 'new searchable')
+        assert {r['record']['id'] for r in a.search(b.id, query_text='searchable')['results']} == {first, second}
+        operator.db.execute('DELETE FROM records WHERE id=?', (second,))
+        operator.search(operator.id, query_text='searchable')  # drains its dirty table
+        assert [r['record']['id'] for r in a.search(b.id, query_text='searchable')['results']] == [first]
+    finally:
+        operator.close()
+    with pytest.raises(RuntimeError):
+        with a.transaction():
+            publish(a, 'rolledback searchable')
+            assert len(a.search(b.id, query_text='searchable')['results']) == 2
+            raise RuntimeError('abort')
+    assert [r['record']['id'] for r in a.search(b.id, query_text='searchable')['results']] == [first]
+
+
+def test_search_at_record_capacity_uses_bounded_verification(tmp_path, monkeypatch):
+    import time
+    a = Node.create(tmp_path/'large', model='benchmark-384', dimensions=384)
+    b = Node.create(tmp_path/'reader', model=a.model, dimensions=a.dimensions)
+    try:
+        a.trust(b.card(port=7443), ['public'])
+        values = [1.0] + [0.0]*383
+        with a.transaction():
+            for i in range(10000):
+                body = {'version': 1, 'origin': a.id, 'model': a.model, 'vector': values,
+                        'text': f'corpus entry {i}' if i != 9999 else 'uniquelexicalneedle',
+                        'parents': [], 'audience': ['@public'], 'created_ms': i}
+                if i == 9999:
+                    body['vector'] = [-1.0] + [0.0]*383
+                obj = sign(a.identity.key, RECORD_DOMAIN, body)
+                a._save(obj, 'accepted')
+            needle = obj['id']
+        verified = []
+        actual = a._verified_record
+        def counted(*args, **kwargs):
+            verified.append(1)
+            return actual(*args, **kwargs)
+        monkeypatch.setattr(a, '_verified_record', counted)
+        start = time.monotonic()
+        result = a.search(b.id, query_text='uniquelexicalneedle', query_vector=values, model=a.model, k=1)
+        elapsed = time.monotonic() - start
+        assert result['results'][0]['record']['id'] == needle
+        assert result['coverage']['candidate_limited'] is True
+        assert result['coverage']['records_considered'] <= 256
+        assert len(verified) <= 256
+        assert elapsed < .5  # The production remote-search deadline, not a relaxed test budget.
+        result['results'][0]['record']['body']['text'] = 'caller mutation'
+        verified.clear()
+        assert a.search(b.id, query_text='uniquelexicalneedle')['results'][0]['record']['body']['text'] == 'uniquelexicalneedle'
+        assert not verified  # Only signature/schema verification is reused.
+        print(f'10,000 x 384 indexed cold remote search: {elapsed:.4f}s')
+    finally:
+        a.close(); b.close()

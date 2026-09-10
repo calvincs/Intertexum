@@ -24,7 +24,7 @@ def tool_definitions(schemas):
         result.append(types.Tool(name='mesh_'+name,description=item['description'],input_schema=schema,
             annotations=types.ToolAnnotations(read_only_hint=name not in agent.MUTATIONS,
                 destructive_hint=name in {'publish','approve','retract','forget','receipt_abandon','retain','maintenance','retire_receipts','thread_retire','authorize','outbox_ack'},idempotent_hint=True,
-                open_world_hint=name in {'search','fetch','send','sync','federated_search','thread_read','thread_reply','queue_message'})))
+                open_world_hint=name in {'peer_status','search','fetch','send','sync','federated_search','thread_read','thread_reply','queue_message'})))
     return result
 
 

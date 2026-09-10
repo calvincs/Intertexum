@@ -45,6 +45,10 @@ use global addresses reject non-global referral endpoints. Local/private demo
 profiles deliberately allow local addresses. These bounds do not prove Sybil or
 eclipse resistance. Operators still need independently controlled seeds.
 
+`mesh_peer_status(peer)` reads a selected receiver's feature/model information
+and current grants to this caller; unsupported legacy peers leave permissions
+unknown. It exposes no other peers' ACLs and changes no authority.
+
 `mesh_federated_search(query, peers?, k)` queries at most eight peers with at most
 four concurrent requests, verifies results, merges by reciprocal rank, and returns
 holders plus explicit success/failure coverage. k is 1–20. Output has a byte bound.
@@ -52,7 +56,9 @@ There is no global completeness guarantee, automatic replication, or search
 forwarding through bootstrap nodes. Query recipients learn the query.
 
 `mesh_write_document(content)` splits up to 32 KiB of UTF-8 into at most 64 private
-records fitting the bundled 128-token encoder. Ingestion is atomic. Returned source
+records fitting the bundled 128-token encoder. Ingestion is atomic. Unpublished
+private records are included in owner-local search and excluded from remote reads.
+Published drafts stay inspectable by ID but do not duplicate shared search hits. Returned source
 hash and character ranges let the agent preserve context; these local ingestion
 metadata are not additional signed cross-node provenance. Publish selected chunks
 explicitly. Signed record ancestry continues to prevent audience widening.
@@ -60,12 +66,14 @@ explicitly. Signed record ancestry continues to prevent audience widening.
 ## Durable messages and threads
 
 `mesh_queue_message(peer, content, ttl)` stores a signed, expiring message before
-network delivery. The managed daemon, MCP runtime and JSONL runtime retry one due
-delivery at a time with bounded backoff, up to a maximum seven-day expiry. It reuses
+network delivery. The managed daemon, MCP runtime and JSONL runtime retry with up to four independent destinations in flight,
+enqueue-order delivery per peer, bounded pacing and backoff, up to a maximum seven-day expiry. It reuses
 the same signed ID; recipient deduplication survives inbox acknowledgment and
 restart. Remote errors remain visible in `mesh_outbox`; permission denial can be
 repaired before expiry. A stored acknowledgment means **received, not processed**.
 A sender crash between remote receipt and local acknowledgment safely retries.
+Replies signed before a same-key certificate renewal remain valid after renewal
+while current transport authentication, host grants and membership still apply.
 The old immediate `mesh_send` remains for compatibility, with uncertain-delivery
 semantics. Queues require a running managed runtime; a stopped node cannot deliver.
 
@@ -136,7 +144,8 @@ access. Run separate node directories/identities for independent harness princip
 this version does not implement multiple local tenants in one MCP daemon.
 
 Project code uses MIT; model/dependency notices remain separate. Release
-checks build the wheel and Pages artifact and run the suite on Linux/Python 3.13.
+checks build the wheel and source archive and run the suite on Linux/Python 3.13;
+the separate website checkout has its own static checks.
 Other Python/platform claims need installation testing. For recovery, stop the
 node, run `backup --output PRIVATE_DIRECTORY`, then restore into a new directory
 with `restore --source BACKUP`. Restores remain network-suspended until explicit
@@ -156,3 +165,7 @@ Production rollout still requires operator-controlled WAN/CGNAT tests, actual
 seed/relay hosts in separate failure domains, relay cost monitoring, a two-week
 pilot, and privacy/retention configuration for those hosts. These require real
 infrastructure and cannot be demonstrated by a local test alone.
+
+See [OPERATING_LIMITS.md](OPERATING_LIMITS.md) for candidate-bounded search,
+withdrawal reserves, permanent-budget recovery, invitation and processing-ack
+conventions, and the measured operating envelope.

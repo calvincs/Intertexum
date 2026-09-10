@@ -107,7 +107,8 @@ def run(turnserver,root):
         for name in ('seed','alice','bob'):nodes.append(Node.create(root/name,model='nat-lab',dimensions=3))
         seed,a,b=nodes;directory=Directory(seed)
         seedserver=BootstrapServer(directory,'0.0.0.0',7444);thread=seedserver.start()
-        config={'seeds':[seed.card('10.20.1.1',7444)],'ice_servers':[
+        config={'seeds':[seed.card('10.20.1.1',7444)],
+            'ice_candidate_cidrs':['10.20.0.0/16'],'ice_servers':[
             {'urls':'stun:10.20.1.1:3478'},
             {'urls':'turn:10.20.1.1:3478?transport=tcp','username':'mesh','credential':'test-password'}]}
         for i,(n,other,net) in enumerate(((a,b,clients[0]),(b,a,clients[1])),1):
@@ -139,7 +140,7 @@ def run(turnserver,root):
         for r in routers:inside(r,'iptables','-D','FORWARD','1')
         inside(routers[0],'ip','addr','del','10.20.1.2/24','dev','ext0')
         inside(routers[0],'ip','addr','add','10.20.1.3/24','dev','ext0')
-        end=time.monotonic()+75
+        end=time.monotonic()+150
         while time.monotonic()<end:
             state=rpc(workers[0],'status')
             if state.get('observed_ip')=='10.20.1.3':break

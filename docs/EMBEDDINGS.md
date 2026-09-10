@@ -98,11 +98,11 @@ CPUExecutionProvider, two threads, batch size one, and a specific local model
 path. Runtime telemetry events are disabled before model construction.
 
 ```bash
-.venv/bin/agentmesh --data /tmp/notes init
-.venv/bin/agentmesh --data /tmp/notes write --text 'Restore the database from backups after disk failure.'
+.venv/bin/intertexum --data /tmp/notes init
+.venv/bin/intertexum --data /tmp/notes write --text 'Restore the database from backups after disk failure.'
 # Publish the returned private ID to make it eligible for shared search:
-.venv/bin/agentmesh --data /tmp/notes publish PRIVATE_ID --audience '*'
-.venv/bin/agentmesh --data /tmp/notes search --text 'Recover data after losing a drive'
+.venv/bin/intertexum --data /tmp/notes publish PRIVATE_ID --audience '*'
+.venv/bin/intertexum --data /tmp/notes search --text 'Recover data after losing a drive'
 ```
 
 The 128-token limit includes special tokens. Overlength input fails with a clear

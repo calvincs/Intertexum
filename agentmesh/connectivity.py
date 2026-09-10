@@ -9,6 +9,7 @@ import ipaddress
 import json
 from pathlib import Path
 import secrets
+import random
 import sqlite3
 import threading
 import time
@@ -23,10 +24,21 @@ from .rendezvous import envelope, validate, DOMAIN
 
 MAX_FRAME=16384
 MAX_PAYLOAD=2*1024*1024
+POLL_ACTIVE=2
+POLL_IDLE_MAX=10
+
+
+def candidate_address(ip):
+    """Account for standard IPv4 embedding before applying destination policy."""
+    if isinstance(ip,ipaddress.IPv6Address):
+        if ip.ipv4_mapped:return ip.ipv4_mapped
+        if ip in ipaddress.ip_network('64:ff9b::/96'):
+            return ipaddress.IPv4Address(int(ip)&0xffffffff)
+    return ip
 
 
 def configuration(obj):
-    if not isinstance(obj,dict) or not set(obj)<={'network','seeds','ice_servers','relay_only','advertise_host','listen_port','mdns'}:
+    if not isinstance(obj,dict) or not set(obj)<={'network','seeds','ice_servers','relay_only','advertise_host','listen_port','mdns','ice_candidate_cidrs'}:
         raise Invalid('invalid connectivity configuration')
     out={'network':'agentmesh-demo-v1','ice_servers':[],'relay_only':False,**obj}
     if not isinstance(out['network'],str) or not 1<=len(out['network'])<=100:
@@ -37,6 +49,12 @@ def configuration(obj):
     if not out['seeds'] and (not out.get('mdns',True) or out['relay_only']): raise Invalid('seedless discovery requires mDNS without relay-only')
     if 'listen_port' in out and (type(out['listen_port']) is not int or not 1024<=out['listen_port']<=65535):raise Invalid('listen_port must be an unprivileged TCP port')
     for card in out['seeds']: validate_card(card)
+    cidrs=out.get('ice_candidate_cidrs',[])
+    if not isinstance(cidrs,list) or len(cidrs)>32 or any(not isinstance(c,str) for c in cidrs):
+        raise Invalid('ice_candidate_cidrs must contain at most 32 owner-authorized IP ranges')
+    try:
+        if 'ice_candidate_cidrs' in out:out['ice_candidate_cidrs']=[str(ipaddress.ip_network(c,strict=False)) for c in cidrs]
+    except ValueError as exc:raise Invalid('invalid ICE candidate IP range') from exc
     if type(out['relay_only']) is not bool: raise Invalid('relay_only must be boolean')
     if 'advertise_host' in out: ipaddress.ip_address(out['advertise_host'])
     if not isinstance(out['ice_servers'],list) or len(out['ice_servers'])>4:
@@ -76,20 +94,26 @@ def selected_path(pc):
             'local_type':pair.local_candidate.type,'remote_type':pair.remote_candidate.type}
 
 
-def check_sdp(sdp):
+def check_sdp(sdp, *, allowed=None):
     if not isinstance(sdp,str) or len(sdp)>10000 or sdp.count('m=')!=1 or 'm=application ' not in sdp:
         raise Invalid('only one data-channel media section is allowed')
-    count=0
+    count=0;kept=0;lines=[]
     for line in sdp.splitlines():
         if line.startswith('a=candidate:'):
             count+=1
             fields=line.split()
             try:
                 ip=ipaddress.ip_address(fields[4]);port=int(fields[5])
-                if ip.is_unspecified or ip.is_multicast or not 1<=port<=65535: raise ValueError()
+                target=candidate_address(ip)
+                if target.is_unspecified or target.is_multicast or '%' in fields[4] or not 1<=port<=65535: raise ValueError()
             except (IndexError,ValueError): raise Invalid('invalid numeric ICE candidate')
+            if allowed is not None and not allowed(ip):continue
+            kept+=1
+        lines.append(line)
     if count>32 or 'a=fingerprint:sha-256 ' not in sdp:
         raise Invalid('bounded ICE candidates and SHA-256 DTLS fingerprint required')
+    if count and not kept:raise Denied('no ICE candidates permitted by local address policy')
+    return '\r\n'.join(lines)+'\r\n'
 
 
 class Session:
@@ -138,7 +162,7 @@ class Session:
                             if self.processing:raise Invalid('one incoming RPC per session')
                             if len(buf)>128*1024: raise Invalid('request too large')
                             self.processing=True
-                            asyncio.create_task(self.serve(obj))
+                            self.owner.spawn(self.serve(obj))
                         else: raise Invalid('invalid data-channel RPC')
                 else: raise Invalid('unexpected frame')
             except (Invalid,TypeError,KeyError): channel.close()
@@ -205,8 +229,13 @@ class Connectivity:
         self.loop=asyncio.new_event_loop();self.thread=None
         self.sessions={};self.wanted=set();self.dialing=set();self.answers=set()
         self.state={'status':'starting','peers':{},'seeds':{},'reachability':'unknown'}
-        self.stop_event=None;self.retry={};self.seed_retry={};self.registered={}
+        self.stop_event=None;self.stop_requested=threading.Event()
+        self.retry={};self.seed_retry={};self.registered={}
         self.observed={};self.last_observed={};self.last_refreshed={}
+        self.poll_due={};self.poll_interval={};self.seed_failures={};self.seed_locks={}
+        self.discovery_cursors={};self.discovery_seed=0;self.discovery_due=0
+        self.tasks=set();self.stopping=False
+        self.random=random.SystemRandom()
         self.db=sqlite3.connect(node.directory/'connectivity.sqlite',check_same_thread=False,isolation_level=None)
         self.db.executescript('CREATE TABLE IF NOT EXISTS generations(peer TEXT PRIMARY KEY,value INTEGER);'
             'CREATE TABLE IF NOT EXISTS endpoints(peer TEXT PRIMARY KEY,issued INTEGER,wire TEXT);')
@@ -215,20 +244,61 @@ class Connectivity:
         self.thread=threading.Thread(target=self._run,daemon=True);self.thread.start()
         return self
 
+    def spawn(self, coro):
+        task=asyncio.create_task(coro)
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+        return task
+
+    def candidate_allowed(self, peer, ip):
+        # Public enrollment is identity discovery, never permission to probe a LAN.
+        address=candidate_address(ip)
+        if address.is_unspecified or address.is_multicast:return False
+        if self.node.defense.blocked(source=str(ip),peer=peer) or self.node.defense.blocked(source=str(address),peer=peer):
+            return False
+        public=address.is_global
+        if isinstance(address,ipaddress.IPv6Address):
+            # Older Python versions classify deprecated site-local and some
+            # transition addresses as global. They are not a public-only route.
+            public=public and not address.is_site_local
+            embedded=([address.sixtofour] if address.sixtofour else [])+list(address.teredo or ())
+            if any(self.node.defense.blocked(source=str(item),peer=peer) for item in embedded):return False
+            public=public and all(item.is_global for item in embedded)
+        if public:return True
+        if any(address in ipaddress.ip_network(c) or ip in ipaddress.ip_network(c)
+               for c in self.config.get('ice_candidate_cidrs',[])):return True
+        # mDNS is a separate owner-enabled LAN introduction. Restrict its implicit
+        # exception to that signed endpoint, not arbitrary private destinations.
+        from .onboarding import policy
+        from .discovery import local_address
+        if not self.config['relay_only'] and self.config.get('mdns',True) and policy(self.node)['mdns']:
+            with self.node.lock:
+                lan=self.node.db.execute('SELECT 1 FROM lan_peers WHERE peer=?',(peer,)).fetchone()
+                card=self.node.peer(peer)['card']
+            return bool(lan and local_address(str(address)) and str(address)==card['host'])
+        return False
+
     def _run(self):
         asyncio.set_event_loop(self.loop)
         try:self.loop.run_until_complete(self._main())
         except asyncio.CancelledError:pass
-        self.loop.run_until_complete(self.loop.shutdown_asyncgens())
-        self.loop.run_until_complete(self.loop.shutdown_default_executor())
-        self.loop.close()
+        except Exception as exc:
+            self.state['status']='failed'
+            self.state['last_runtime_error']=type(exc).__name__+': '+str(exc)[:120]
+        finally:
+            self.loop.run_until_complete(self.loop.shutdown_asyncgens())
+            self.loop.run_until_complete(self.loop.shutdown_default_executor())
+            self.loop.close()
 
     async def _main(self):
         self.main_task=asyncio.current_task()
         self.stop_event=asyncio.Event()
+        # close() can run before this coroutine gets its first event-loop turn.
+        # Preserve that request independently of loop-owned startup objects.
+        if self.stop_requested.is_set():self.stop_event.set()
         from .discovery import Discovery
-        discovery=Discovery(self) if self.passive else None
-        discovery_task=asyncio.create_task(discovery.run()) if discovery else None
+        discovery=Discovery(self) if self.passive and not self.stop_event.is_set() else None
+        discovery_task=self.spawn(discovery.run()) if discovery else None
         before=None;last_scan=0;last_exchange=0;exchange=None
         try:
             while not self.stop_event.is_set():
@@ -240,9 +310,14 @@ class Connectivity:
                     continue
                 await asyncio.gather(*(self._seed(card) for card in self.config['seeds']))
                 now=time.monotonic()
+                if self.config['seeds'] and now>=self.discovery_due:
+                    seed=self.config['seeds'][self.discovery_seed%len(self.config['seeds'])]
+                    self.discovery_seed+=1
+                    await self.refresh(seed)
+                    self.discovery_due=time.monotonic()+self.random.uniform(24,36)
                 if now-last_exchange>30 and (exchange is None or exchange.done()):
                     last_exchange=now
-                    exchange=asyncio.create_task(self.exchange_peers())
+                    exchange=self.spawn(self.exchange_peers())
                 if now-last_scan>10:
                     addresses=tuple(sorted(get_host_addresses(use_ipv4=True,use_ipv6=True)))
                     if before is not None and addresses!=before:
@@ -261,7 +336,7 @@ class Connectivity:
                 if self.passive:
                     for peer in self.wanted:
                         if self.node.id<peer and not any(s.peer==peer for s in self.sessions.values()) and peer not in self.dialing:
-                            if now>=self.retry.get(peer,0): asyncio.create_task(self._reconnect(peer))
+                            if now>=self.retry.get(peer,0): self.spawn(self._reconnect(peer))
                 self.state['status']='running'
                 if self.passive:
                     self.state['updated_at']=int(time.time())
@@ -271,13 +346,22 @@ class Connectivity:
                 try: await asyncio.wait_for(self.stop_event.wait(),2)
                 except asyncio.TimeoutError: pass
         finally:
-            if discovery_task:
-                discovery_task.cancel()
-                await asyncio.gather(discovery_task,return_exceptions=True)
+            self.stopping=True
+            # Stop only our operations first. aiortc's ICE / DTLS tasks must stay
+            # alive until close has finished releasing their sockets and futures.
+            owned=list(self.tasks)
+            for task in owned:task.cancel()
+            await asyncio.gather(*owned,return_exceptions=True)
             for s in list(self.sessions.values()):await asyncio.shield(s.pc.close())
-            tasks=[t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
-            for t in tasks:t.cancel()
-            await asyncio.gather(*tasks,return_exceptions=True)
+            self.sessions.clear();self.answers.clear();self.state['peers']={}
+            # A canceled transport may schedule its own final close task. Drain
+            # successive generations before shutting down the dedicated loop.
+            while True:
+                await asyncio.sleep(0)
+                tasks=[t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+                if not tasks:break
+                for task in tasks:task.cancel()
+                await asyncio.gather(*tasks,return_exceptions=True)
 
     async def _reconnect(self, peer):
         try: await self.connect(peer)
@@ -289,9 +373,15 @@ class Connectivity:
         return await asyncio.to_thread(client.request,'connectivity',envelope=obj)
 
     async def _seed(self, card):
-        if time.monotonic()<self.seed_retry.get(card['id'],0): return
+        lock=self.seed_locks.setdefault(card['id'],asyncio.Lock())
+        async with lock:
+            await self._seed_locked(card)
+
+    async def _seed_locked(self, card):
+        key=card['id'];now=time.monotonic()
+        if self.stopping or now<self.seed_retry.get(key,0):return
         try:
-            if time.monotonic()-self.last_observed.get(card['id'],-10000)>30:
+            if now-self.last_observed.get(key,-10000)>120:
                 observed=await self._call(card,'observe',{})
                 ipaddress.ip_address(observed['observed_ip'])
                 old=self.observed.get(card['id'])
@@ -305,24 +395,34 @@ class Connectivity:
                 host=self.config.get('advertise_host',self.observed[card['id']])
                 await asyncio.to_thread(BootstrapClient(card,self.config['network']).register,self.node,host,self.port)
                 self.registered[card['id']]=time.monotonic()
-                if self.passive:
-                    self.state['tcp_probe']=await self._call(card,'probe',{'port':self.port})
-                    self.state['reachability']='tcp-reachable-from-seed' if self.state['tcp_probe']['tcp_reachable'] else 'direct-tcp-unreachable-from-seed'
-            if time.monotonic()-self.last_refreshed.get(card['id'],-10000)>30:
-                await self.refresh(card)
-                self.last_refreshed[card['id']]=time.monotonic()
-            result=await self._call(card,'poll',{'answers':list(self.answers)[:8],'offers':self.passive})
-            for obj in result['messages']:
-                try:await self._signal(card,obj)
-                except Exception as exc:
-                    # Malformed remote SDP can raise parser/transport exceptions
-                    # beyond our schema errors. Isolate each mailbox item.
-                    self.state['last_signal_error']=type(exc).__name__
+                if self.passive and not self.config['relay_only']:
+                    # Reachability probes have their own small diagnostic quota;
+                    # an unavailable probe must not prevent mailbox delivery.
+                    try:
+                        self.state['tcp_probe']=await self._call(card,'probe',{'port':self.port})
+                        self.state['reachability']='tcp-reachable-from-seed' if self.state['tcp_probe']['tcp_reachable'] else 'direct-tcp-unreachable-from-seed'
+                    except (OSError,Invalid,Denied):self.state['reachability']='probe-unavailable'
+                elif self.config['relay_only']:self.state['reachability']='relay-only'
+            if self.answers or now>=self.poll_due.get(key,0):
+                result=await self._call(card,'poll',{'answers':list(self.answers)[:8],'offers':self.passive})
+                for obj in result['messages']:
+                    try:await self._signal(card,obj)
+                    except Exception as exc:
+                        # Malformed remote SDP can raise parser/transport exceptions
+                        # beyond our schema errors. Isolate each mailbox item.
+                        self.state['last_signal_error']=type(exc).__name__
+                interval=POLL_ACTIVE if result['messages'] or self.answers else min(POLL_IDLE_MAX,self.poll_interval.get(key,POLL_ACTIVE)*2)
+                self.poll_interval[key]=interval
+                self.poll_due[key]=time.monotonic()+self.random.uniform(interval*.8,interval*1.2)
             self.state['seeds'][card['id']]='connected'
+            self.seed_failures[key]=0
         except (OSError,Invalid,Denied,KeyError,TypeError,ValueError) as exc:
             self.state['last_seed_error']=type(exc).__name__+': '+str(exc)[:120]
             self.state['seeds'][card['id']]='unavailable'
-            self.seed_retry[card['id']]=time.monotonic()+5
+            failures=self.seed_failures.get(key,0)+1;self.seed_failures[key]=failures
+            delay=max(getattr(exc,'retry_after',0),min(60,2**min(failures,6)))
+            self.seed_retry[key]=time.monotonic()+self.random.uniform(delay,delay*1.2)
+            self.state['seed_retry_after']=round(self.seed_retry[key]-time.monotonic(),1)
 
     async def exchange_peers(self):
         from .network import Client
@@ -331,15 +431,24 @@ class Connectivity:
         for peer in __import__('random').SystemRandom().sample(candidates,min(3,len(candidates))):
             try:
                 # Bounded direct RPC only: no recursive seed fallback on the loop thread.
-                result=await asyncio.to_thread(Client(self.node,peer['card']['id'])._direct,'peer_view',{})
+                if self.config['relay_only']:
+                    session=next((s for s in self.sessions.values() if s.peer==peer['card']['id'] and s.ready.is_set()),None)
+                    if session is None:continue
+                    result=await session.request('peer_view',{})
+                else:result=await asyncio.to_thread(Client(self.node,peer['card']['id'])._direct,'peer_view',{})
                 for obj in result.get('result',{}).get('announcements',[]):
                     try:learn(self.node,obj,self.config['network'],source=peer['card']['id'])
                     except (Invalid,Denied):continue
-            except (OSError,Invalid,Denied):continue
+            except (OSError,Invalid,Denied,asyncio.TimeoutError):continue
 
     async def refresh(self, card=None):
         for seed in [card] if card else self.config['seeds']:
-            try: found=await asyncio.to_thread(BootstrapClient(seed,self.config['network']).discover)
+            try:
+                page=await asyncio.to_thread(BootstrapClient(seed,self.config['network']).discover_page,
+                                             self.discovery_cursors.get(seed['id'],''))
+                found=page['announcements']
+                self.discovery_cursors[seed['id']]=page['next'] or ''
+                self.last_refreshed[seed['id']]=time.monotonic()
             except (OSError,Invalid,Denied):continue
             for obj in found:
                 body=check_announcement(obj,self.config['network']);peer=body['card']['id']
@@ -372,6 +481,7 @@ class Connectivity:
         except Exception:self.db.execute('ROLLBACK');raise
 
     def make_session(self, peer, sid):
+        if self.stopping or self.stop_requested.is_set():raise Denied('connectivity is stopping')
         if len(self.sessions)>=8:raise Denied('connection capacity reached')
         servers=[RTCIceServer(**x) for x in self.config['ice_servers']]
         pc=RTCPeerConnection(RTCConfiguration(iceServers=servers))
@@ -395,11 +505,11 @@ class Connectivity:
         verify(obj,certificate(known['certificate']).public_key(),DOMAIN)
         if self.node.defense.blocked(peer=peer):raise Denied('signaling peer blocked')
         if b['action']!='send' or args.get('to')!=self.node.id:raise Invalid('wrong signal recipient')
-        check_sdp(args.get('sdp'));sid=args['session']
+        sdp=check_sdp(args.get('sdp'),allowed=lambda ip:self.candidate_allowed(peer,ip));sid=args['session']
         if args['type']=='answer':
             s=self.sessions.get(sid)
             if not s or s.peer!=peer or sid not in self.answers:raise Invalid('unsolicited answer')
-            await s.pc.setRemoteDescription(RTCSessionDescription(args['sdp'],'answer'))
+            await s.pc.setRemoteDescription(RTCSessionDescription(sdp,'answer'))
             self.answers.discard(sid)
         elif args['type']=='offer' and self.passive:
             if peer in self.dialing and self.node.id<peer:return
@@ -407,13 +517,18 @@ class Connectivity:
             for s in list(self.sessions.values()):
                 if s.peer==peer:await asyncio.shield(s.pc.close());self.sessions.pop(s.id,None)
             s=self.make_session(peer,sid)
-            await s.pc.setRemoteDescription(RTCSessionDescription(args['sdp'],'offer'))
-            self.tune(s.pc)
-            await s.pc.setLocalDescription(await s.pc.createAnswer())
-            await self._call(seed,'send',dict(to=peer,session=sid,generation=args['generation'],
-                type='answer',sdp=s.pc.localDescription.sdp))
+            try:
+                await s.pc.setRemoteDescription(RTCSessionDescription(sdp,'offer'))
+                self.tune(s.pc)
+                await s.pc.setLocalDescription(await s.pc.createAnswer())
+                await self._call(seed,'send',dict(to=peer,session=sid,generation=args['generation'],
+                    type='answer',sdp=s.pc.localDescription.sdp))
+            except BaseException:
+                await asyncio.shield(s.pc.close());self.sessions.pop(sid,None)
+                raise
 
     async def connect(self, peer):
+        if self.stopping or self.stop_requested.is_set():raise Denied('connectivity is stopping')
         if (self.node.directory/'connectivity-suspended').exists() or not __import__('agentmesh.onboarding',fromlist=['policy']).policy(self.node)['network']:raise Denied('connectivity suspended after deregistration; configure again to resume')
         self.node.peer(peer)
         for s in self.sessions.values():
@@ -461,12 +576,15 @@ class Connectivity:
         finally:self.dialing.discard(peer)
 
     async def rpc(self, peer, op, args):
-        session=await self.connect(peer)
-        try:return await session.request(op,args)
-        except (OSError,asyncio.TimeoutError):
-            await asyncio.shield(session.pc.close())
-            # Never silently replay a possibly delivered operation.
-            raise OSError('delivery status unknown; connection will be re-established for the next request')
+        task=asyncio.current_task();self.tasks.add(task)
+        try:
+            session=await self.connect(peer)
+            try:return await session.request(op,args)
+            except (OSError,asyncio.TimeoutError):
+                await asyncio.shield(session.pc.close())
+                # Never silently replay a possibly delivered operation.
+                raise OSError('delivery status unknown; connection will be re-established for the next request')
+        finally:self.tasks.discard(task)
 
     def request(self, peer, op, args):
         f=asyncio.run_coroutine_threadsafe(self.rpc(peer,op,args),self.loop)
@@ -475,9 +593,17 @@ class Connectivity:
             f.cancel();raise OSError('connectivity operation timed out')
 
     def close(self):
+        self.stop_requested.set()
         if self.thread and self.thread.is_alive():
-            if self.stop_event:self.loop.call_soon_threadsafe(self.stop_event.set)
-            if getattr(self,'main_task',None):self.loop.call_soon_threadsafe(self.main_task.cancel)
+            def stop():
+                # One loop callback prevents the stop event waking _main into
+                # cleanup before a second callback cancels that cleanup itself.
+                if self.stop_event:self.stop_event.set()
+                if getattr(self,'main_task',None) and not self.stopping:self.main_task.cancel()
+            try:self.loop.call_soon_threadsafe(stop)
+            except RuntimeError:
+                if not self.loop.is_closed():raise
             self.thread.join(timeout=15)
             if self.thread.is_alive():raise OSError('connectivity shutdown timed out')
+        if not self.loop.is_closed():self.loop.close()
         self.db.close()

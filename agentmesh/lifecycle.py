@@ -96,11 +96,18 @@ def retire_epoch(node,expected_epoch):
 
 
 def capacity(node):
+    from .node import MAX_EVENTS, MAX_UNKNOWN_RETRACTIONS_PER_ORIGIN, MAX_UNKNOWN_RETRACTIONS_PER_SUPPLIER
     with node.lock:
         tables={r[0] for r in node.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        sizes={name:node.db.execute('SELECT count(*) FROM '+name).fetchone()[0] for name in ('records','messages','threads','posts','outbox','received_ids','tool_receipts','rejected') if name in tables}
+        sizes={name:node.db.execute('SELECT count(*) FROM '+name).fetchone()[0] for name in ('records','messages','threads','posts','outbox','received_ids','tool_receipts','rejected','retractions') if name in tables}
         epoch=node.db.execute("SELECT value FROM lifecycle WHERE key='receipt_epoch'").fetchone()[0]
-    return {'database_bytes':(node.directory/'mesh.sqlite').stat().st_size,'wal_bytes':(node.directory/'mesh.sqlite-wal').stat().st_size if (node.directory/'mesh.sqlite-wal').exists() else 0,'counts':sizes,'limits':{'records':10000,'messages':10000,'threads':1000,'posts':10000,'outbox':10000,'received_ids':20000,'tool_receipts':10000,'rejected':10000},'receipt_epoch':epoch,'new_mutation_key_prefix':f'e{epoch}:'}
+        allocations = dict(node.db.execute('SELECT allocation,count(*) FROM retraction_sources GROUP BY allocation'))
+    return {'database_bytes':(node.directory/'mesh.sqlite').stat().st_size,'wal_bytes':(node.directory/'mesh.sqlite-wal').stat().st_size if (node.directory/'mesh.sqlite-wal').exists() else 0,'counts':sizes,'limits':{'records':10000,'messages':10000,'threads':1000,'posts':10000,'outbox':10000,'received_ids':20000,'tool_receipts':10000,'rejected':10000},'receipt_epoch':epoch,'new_mutation_key_prefix':f'e{epoch}:',
+        'retractions': {'counts': {name: allocations.get(name, 0) for name in ('local','stored','unknown')},
+                        'limit_per_pool': MAX_EVENTS,
+                        'unknown_per_origin': MAX_UNKNOWN_RETRACTIONS_PER_ORIGIN,
+                        'unknown_per_supplier': MAX_UNKNOWN_RETRACTIONS_PER_SUPPLIER,
+                        'recovery': 'Keep all tombstones. Inspect or block an abusive source; blocking does not erase withdrawals. Local and stored-target pools are reserved independently.'}}
 
 
 def forget(node,rid):

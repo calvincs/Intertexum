@@ -106,21 +106,29 @@ def test_jsonl_subprocess_and_durable_receipts(tmp_path):
         sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
     p=invitation(seed,9);p['connectivity']['listen_port']=port
     setup(tmp_path/'agent',p)
-    private_write(tmp_path/'agent'/'policy.json',{'write':False})
+    from agentmesh import conversations
+    node=Node(tmp_path/'agent')
+    root=conversations.create(node,'Hosted public conversation',['@public'])['id'];host=node.id
+    node.close()
+    private_write(tmp_path/'agent'/'policy.json',{'write':False,'send':False,'network':False})
     requests=[{'id':'status','tool':'status','arguments':{}},
               {'id':'write-once','tool':'write','arguments':{'text':'owner disabled writing'}},
-              {'id':'unknown','tool':'trust','arguments':{}}]
+              {'id':'unknown','tool':'trust','arguments':{}},
+              {'id':'reply-disabled','tool':'thread_reply','arguments':{'peer':host,'thread':root,'content':'must not publish'}}]
     try:
         command=[sys.executable,'-m','agentmesh','--data',str(tmp_path/'agent'),'agent']
         result=subprocess.run(command,input=''.join(json.dumps(x)+'\n' for x in requests),text=True,capture_output=True,timeout=25)
         assert result.returncode==0,result.stderr
         responses=[json.loads(x) for x in result.stdout.splitlines()]
-        assert len(responses)==3
+        assert len(responses)==4
         assert responses[0]['result']['capabilities']['write'] is False
         assert responses[1]['error']['code']=='denied'
         assert responses[2]['error']['code']=='invalid_request'
+        assert responses[3]['error']['code']=='denied'
         node=Node(tmp_path/'agent')
         try:
+            assert conversations.page(node,node.id,thread=root)['items']==[]
+            with pytest.raises(Denied):conversations.reply(node,node.id,root,'domain path also denies')
             # Even after owner re-enables the capability, a completed request ID
             # returns its durable prior result instead of becoming a new write.
             private_write(node.directory/'policy.json',{})
@@ -134,6 +142,41 @@ def test_jsonl_subprocess_and_durable_receipts(tmp_path):
             assert not result['error']['retryable']
         finally:node.close()
     finally:seed.close()
+
+
+def test_completed_mutation_error_advice_matches_durable_receipt(mesh,monkeypatch):
+    from agentmesh.network import Client
+    a,b,_=mesh
+    attempts=[]
+    def failed(client,content):
+        attempts.append(content)
+        raise OSError('connection refused before delivery')
+    monkeypatch.setattr(Client,'send',failed)
+    first=invoke(a,'send-once','send',peer=b.id,text='one intended message')
+    error=first['error']
+    assert error['code']=='unavailable' and not error['retryable']
+    assert error['receipt_state']=='completed' and error['same_key_action']=='retrieve_receipt'
+    def repaired(client,content):
+        attempts.append(content)
+        return {'id':'delivered'}
+    monkeypatch.setattr(Client,'send',repaired)
+    assert invoke(a,'send-once','send',peer=b.id,text='one intended message')==first
+    assert attempts==['one intended message']
+    # Receipts retained across an upgrade also stop advertising reexecution.
+    legacy=copy.deepcopy(first)
+    legacy['error']={'code':'unavailable','detail':error['detail'],'retryable':True,
+                     'next_action':'check readiness; retry mutations only with the same request id'}
+    a.db.execute('UPDATE tool_receipts SET response=? WHERE id=?',(json.dumps(legacy),'send-once'))
+    assert invoke(a,'send-once','send',peer=b.id,text='one intended message')==first
+    assert attempts==['one intended message']
+    assert invoke(a,'deliberate-new-operation','send',peer=b.id,text='one intended message')['ok']
+    assert len(attempts)==2
+    def uncertain(client,content):raise Denied('delivery status unknown; response lost')
+    monkeypatch.setattr(Client,'send',uncertain)
+    unknown=invoke(a,'uncertain','send',peer=b.id,text='uncertain message')['error']
+    assert unknown['code']=='delivery_unknown' and not unknown['retryable']
+    assert unknown['same_key_action']=='retrieve_receipt'
+    assert 'do not resend with a fresh operation ID' in unknown['next_action']
 
 
 def test_agent_entry_commands_without_node_directory(tmp_path):

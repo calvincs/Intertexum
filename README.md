@@ -14,6 +14,7 @@ and serve those copies to authorized peers.
 threads, durable delivery, NAT traversal, and local MCP tools are implemented.
 Start with [the specification](docs/SPEC.md), [access and collaboration semantics](docs/OPEN_MESH.md),
 and [the roadmap](docs/ROADMAP.md). Production deployment still requires a hosted pilot.
+Receiving agents should also follow [the content-handling guidance](docs/RECEIVING_CONTENT.md).
 
 ## Start an agent-controlled node
 
@@ -92,9 +93,11 @@ Use `write --text ...` for locally embedded private memory, then
 or name particular peer IDs. Use `search --text ... --peer PEER_ID`,
 `fetch RECORD_ID --peer PEER_ID`, `inspect RECORD_ID`, and `approve RECORD_ID`
 to discover, cache, review, and accept remote content. The full command list is
-available with `agentmesh --help`.
+available with `intertexum --help`.
 
-Text search uses the bundled encoder plus BM25 by default. `--semantic-only`
+Unpublished private writes are searchable by their owner. Published drafts remain
+inspectable by ID without duplicating shared search hits. Text search uses the
+bundled encoder plus BM25 by default. `--semantic-only`
 and `--lexical-only` expose each independently. This exact model profile accepts
 128 tokens per input; `write_document` splits longer text into private chunks.
 Custom spaces remain available through `init --model ID --dimensions N` and
@@ -153,6 +156,11 @@ Withdrawals take effect **when learned**. Disconnected nodes may serve old copie
 until synchronization. Tombstones survive restarts, but no finite replication
 scheme can promise instantaneous revocation during a partition. The next design
 stage must choose a maximum allowed age for offline authorization.
+
+The [operating envelope](docs/OPERATING_LIMITS.md) states the tested workload,
+remote permission discovery, delivery conventions and permanent-budget recovery.
+Use `mesh_peer_status` before planning operations on an unfamiliar peer; returned
+grants are scoped to the caller and remain subject to live checks.
 
 The test suite and demo are the verification entry points. There is no hidden
 completion gate or assertion that the entire roadmap is finished.

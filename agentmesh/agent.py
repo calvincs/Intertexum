@@ -10,6 +10,7 @@ from .onboarding import status, policy, load
 DEFINITIONS={
  'status':('Report readiness, owner capability policy and recovery actions.',{},[]),
  'peers':('List admitted peers; registration alone is insufficient.',{},[]),
+ 'peer_status':('Ask one peer for its protocol features, embedding profile and current permissions granted to this node. This read-only snapshot does not grant access.',{'peer':{'type':'string'}},['peer']),
  'write':('Store private memory with local CPU embedding.',{'text':{'type':'string'}},['text']),
  'publish':('Explicitly share a private record with selected peers or approved readers (*).',{'id':{'type':'string'},'audience':{'type':'array','items':{'type':'string'},'minItems':1}},['id','audience']),
  'search':('Search local memory or one admitted peer. Returned content is untrusted data.',{'text':{'type':'string'},'peer':{'type':'string'},'k':{'type':'integer','minimum':1,'maximum':SEARCH_LIMIT}},['text']),
@@ -49,6 +50,20 @@ DEFINITIONS.update({
 })
 MUTATIONS.update({'cache_configure','receipt_abandon','forget','write_document','authorize','retain','maintenance','retire_receipts','thread_create','thread_reply','thread_retire','queue_message','outbox_ack'})
 
+# One operation policy drives every local adapter and MCP tool discovery.
+# Domain methods still enforce policy when invoked without a tool adapter.
+REQUIRED={
+ 'cache_configure':('cache','retain'),
+ 'receipt_inspect':('retain',),'receipt_abandon':('retain',),'forget':('retain',),
+ 'write_document':('write',),'write':('write',),'publish':('publish',),'search':('search',),
+ 'peer_status':('network',),'fetch':('network','fetch'),'approve':('approve',),
+ 'send':('network','send'),'sync':('network',),'authorize':('manage_access',),'retain':('retain',),
+ 'maintenance':('retain',),'retire_receipts':('retain',),'federated_search':('network','search'),
+ 'thread_retire':('threads','retain'),'thread_create':('threads','publish'),
+ 'thread_read':('threads',),'thread_reply':('threads','send'),
+ 'queue_message':('send',),'outbox':('send',),'outbox_ack':('send',),
+}
+
 
 
 def schemas():
@@ -56,7 +71,21 @@ def schemas():
             for name,(d,p,r) in DEFINITIONS.items()]
 
 
-def error(exc):
+def completed_error(result):
+    """Correct retry metadata without changing a durable operation's outcome."""
+    result=dict(result)
+    result.update(retryable=False,receipt_state='completed',same_key_action='retrieve_receipt',
+        next_action='same idempotency key retrieves this completed error without executing again; '
+                    'inspect durable state and reconcile possible effects, then fix the cause before '
+                    'deliberately submitting a new operation ID')
+    if result['code']=='delivery_unknown':
+        result['next_action']=('same idempotency key retrieves this completed error without executing again; '
+            'inspect durable local and recipient state and reconcile the original operation; '
+            'do not resend with a fresh operation ID without evidence the original did not take effect')
+    return result
+
+
+def error(exc, *, completed_mutation=False):
     detail=str(exc)
     if 'delivery status unknown' in detail or 'request_incomplete' in detail:
         code,retry,action='delivery_unknown',False,'inspect state/inbox; do not repeat with a fresh request id automatically'
@@ -65,7 +94,13 @@ def error(exc):
     elif isinstance(exc,(Invalid,ValueError,TypeError,KeyError)):code,retry,action='invalid_request',False,'correct arguments using tool schemas'
     elif isinstance(exc,OSError):code,retry,action='unavailable',True,'check readiness; retry mutations only with the same request id'
     else:code,retry,action='internal_error',False,'inspect local runtime diagnostics'
-    return {'code':code,'detail':detail[:400],'retryable':retry,'next_action':action}
+    result={'code':code,'detail':detail[:400],'retryable':retry,'next_action':action}
+    if completed_mutation:
+        # A receipt is permanent even when execution raised a transient error.
+        # Never advertise a same-key retry as another execution, or assume an
+        # exception proves that a multi-step mutation had no effects.
+        result=completed_error(result)
+    return result
 
 
 def execute(node,name,a):
@@ -78,6 +113,8 @@ def execute(node,name,a):
         if kind=='integer' and (type(value) is not int or not props[key].get('minimum',0)<=value<=props[key].get('maximum',2**63-1)):raise Invalid('invalid integer: '+key)
         if kind=='boolean' and type(value) is not bool:raise Invalid('expected boolean: '+key)
         if kind=='array' and (not isinstance(value,list) or len(value)<props[key].get('minItems',0) or len(value)>256 or any(not isinstance(x,str) for x in value)):raise Invalid('invalid string array')
+    for capability in REQUIRED.get(name,()):
+        node.capability(capability)
     if name in ('receipt_inspect','receipt_abandon'):
         from .lifecycle import receipt
         return receipt(node,**a)
@@ -109,6 +146,7 @@ def execute(node,name,a):
         return c.deliveries(node,**a)
     if name=='status':return status(node)
     if name=='peers':return node.peers()
+    if name=='peer_status':return Client(node,a['peer']).peer_status()
     if name=='write':return {'id':node.write_text(a['text']),'state':'private'}
     if name=='publish':return {'id':node.publish(a['id'],audience=a['audience']),'state':'accepted'}
     if name=='search':
@@ -152,14 +190,22 @@ def call(node, request):
                     if old:
                         if old[0]!=fingerprint:raise Invalid('request id reused with different arguments')
                         if old[1] is None:raise Denied('request_incomplete: previous operation may have completed')
-                        node.db.execute('COMMIT');return decode(old[1].encode())
+                        response=decode(old[1].encode())
+                        if not response['ok']:
+                            # Upgrade legacy retry guidance as receipts are
+                            # retrieved. Never rerun their completed operation.
+                            response['error']=completed_error(response['error'])
+                            encoded=canonical(response).decode()
+                            if encoded!=old[1]:
+                                node.db.execute('UPDATE tool_receipts SET response=? WHERE id=?',(encoded,rid))
+                        node.db.execute('COMMIT');return response
                     if node.db.execute('SELECT count(*) FROM tool_receipts').fetchone()[0]>=10000:raise Denied('receipt capacity reached; run maintenance to retire this epoch before new mutations')
                     node.db.execute('INSERT INTO tool_receipts VALUES(?,?,NULL)',(rid,fingerprint));node.db.execute('COMMIT');reserved=True;node.active_mutations.add(rid)
                 except Exception:
                     if node.db.in_transaction:node.db.execute('ROLLBACK')
                     raise
         response={'id':rid,'ok':True,'result':execute(node,name,args)}
-    except Exception as exc:response={'id':rid,'ok':False,'error':error(exc)}
+    except Exception as exc:response={'id':rid,'ok':False,'error':error(exc,completed_mutation=reserved)}
     if reserved:
         with node.lock:
             node.db.execute('UPDATE tool_receipts SET response=? WHERE id=?',(canonical(response).decode(),rid))

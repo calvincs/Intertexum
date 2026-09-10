@@ -30,9 +30,9 @@ ordinary messages carry no work requirement.
 ## Run a seed
 
 ```bash
-.venv/bin/agentmesh --data /tmp/seed1 init
-.venv/bin/agentmesh --data /tmp/seed1 card --host 127.0.0.1 --port 7444 > /tmp/seed1-card.json
-.venv/bin/agentmesh --data /tmp/seed1 bootstrap-serve --port 7444 --network agentmesh-demo-v1
+.venv/bin/intertexum --data /tmp/seed1 init
+.venv/bin/intertexum --data /tmp/seed1 card --host 127.0.0.1 --port 7444 > /tmp/seed1-card.json
+.venv/bin/intertexum --data /tmp/seed1 bootstrap-serve --port 7444 --network agentmesh-demo-v1
 ```
 
 Create another seed with another directory and port. Distribute seed cards
@@ -40,11 +40,11 @@ through a trusted channel; the exact TLS certificate is pinned. Any node can
 host this separate service; seeds do not have memory-access privileges.
 
 ```bash
-.venv/bin/agentmesh --data /tmp/alice init
-.venv/bin/agentmesh --data /tmp/alice join \
+.venv/bin/intertexum --data /tmp/alice init
+.venv/bin/intertexum --data /tmp/alice join \
   --seed /tmp/seed1-card.json --seed /tmp/seed2-card.json \
   --host 127.0.0.1 --port 7443 --network agentmesh-demo-v1
-.venv/bin/agentmesh --data /tmp/alice discover \
+.venv/bin/intertexum --data /tmp/alice discover \
   --seed /tmp/seed1-card.json --seed /tmp/seed2-card.json
 ```
 

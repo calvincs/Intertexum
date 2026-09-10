@@ -94,3 +94,32 @@ def test_unknown_peer_bootstrap_over_tls_and_rate_bound(tmp_path):
             server.shutdown();thread.join()
     directory.close()
     for node in nodes: node.close()
+
+
+def test_seed_rate_response_exposes_retry_delay(mesh):
+    from agentmesh.defense import RateLimited
+    seed,_,_=mesh
+    directory=Directory(seed)
+    with BootstrapServer(directory) as server:
+        thread=server.start()
+        try:
+            seed.defense.buckets['discovery:global']=(0,time.time())
+            client=BootstrapClient(seed.card(port=server.server_address[1]))
+            with pytest.raises(RateLimited) as error:client.discover_page()
+            assert error.value.retry_after>=1
+        finally:server.shutdown();thread.join()
+    directory.close()
+
+
+def test_discover_page_rejects_invalid_order_and_cursor(mesh,monkeypatch):
+    seed,a,b=mesh
+    client=BootstrapClient(seed.card(port=7444))
+    objects=sorted([announcement(n,'127.0.0.1',7443,client.network) for n in (a,b)],key=lambda obj:obj['body']['card']['id'])
+    page={'announcements':objects,'next':None,'network':client.network}
+    monkeypatch.setattr(client,'request',lambda *args,**kwargs:page)
+    assert len(client.discover_page()['announcements'])==2
+    page['announcements']=list(reversed(objects))
+    with pytest.raises(Invalid,match='entry'):client.discover_page()
+    page['announcements']=objects
+    page['next']=objects[0]['body']['card']['id']
+    with pytest.raises(Invalid,match='cursor'):client.discover_page()

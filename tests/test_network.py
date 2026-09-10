@@ -126,3 +126,169 @@ def test_oversized_frame_and_idle_client_do_not_break_listener(live):
 def test_ambiguous_json_is_rejected(payload):
     with pytest.raises(Invalid):
         decode(payload)
+
+
+def test_remote_capabilities_are_scoped_to_caller_and_live_policy(live):
+    from agentmesh.openmesh import authorize
+    from agentmesh.onboarding import private_write
+    (a, b, c), servers = live
+    a.trust(b.card(*servers[1].server_address), ['public'])
+    status = Client(b, a.id).peer_status()
+    assert status['permissions'] == ['public']
+    assert status['operations']['search']
+    assert not status['operations']['message']
+    assert status['model_compatible'] and status['private_thread_membership_required']
+    assert c.id not in str(status)  # Other peer grants are not disclosed.
+    authorize(a, b.id, permissions=['message'], ttl=60)
+    assert Client(b, a.id).peer_status()['operations']['message']
+    a.db.execute('UPDATE grants SET expires=0 WHERE peer=?', (b.id,))
+    assert not Client(b, a.id).peer_status()['operations']['message']
+    private_write(a.directory / 'policy.json', {'serve_memory': False})
+    assert not Client(b, a.id).peer_status()['operations']['search']
+
+
+def test_capability_response_identity_and_legacy_unknown(mesh, monkeypatch):
+    from agentmesh.peer_status import describe
+    a, b, _ = mesh
+    client = Client(a, b.id)
+    response = describe(b, a.id)
+    response['peer'] = a.id
+    monkeypatch.setattr(client, 'request', lambda *a, **k: response)
+    with pytest.raises(Invalid, match='identity'):
+        client.peer_status()
+    def old_peer(*args, **kwargs):
+        raise Invalid('unsupported operation or arguments')
+    monkeypatch.setattr(client, 'request', old_peer)
+    status = client.peer_status()
+    assert status['supported'] is False
+    assert status['operations'] is None
+
+
+def test_relay_only_never_attempts_direct_tcp(mesh, monkeypatch):
+    from types import SimpleNamespace
+    a, b, _ = mesh
+    calls = []
+    manager = SimpleNamespace(config={'relay_only': True}, state={'peers': {}},
+        request=lambda peer, op, args: calls.append((peer, op)) or {'ok': True, 'result': {'relayed': True}})
+    a.connectivity = manager
+    try:
+        client = Client(a, b.id)
+        def forbidden(*args, **kwargs):
+            raise AssertionError('direct TCP was attempted')
+        monkeypatch.setattr('agentmesh.network.socket.create_connection', forbidden)
+        assert client.request('capabilities') == {'relayed': True}
+        assert calls == [(b.id, 'capabilities')]
+        with pytest.raises(Denied, match='relay-only'):
+            client._direct('capabilities', {})
+    finally:
+        a.connectivity = None
+
+
+def test_relay_only_listener_rejects_direct_peer_data(live):
+    from types import SimpleNamespace
+    (a, b, _), _ = live
+    a.connectivity = SimpleNamespace(config={'relay_only': True})
+    try:
+        with pytest.raises(Denied, match='relay-only'):
+            Client(b, a.id).request('capabilities')
+    finally:
+        a.connectivity = None
+
+
+def test_outbound_blocks_apply_before_any_transport(mesh, monkeypatch):
+    a, b, _ = mesh
+    a.defense.block('peer', b.id)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('blocked peer contacted')
+    monkeypatch.setattr('agentmesh.network.socket.create_connection', forbidden)
+    with pytest.raises(Denied, match='blocked'):
+        Client(a, b.id).send('must stay local')
+
+
+def test_sync_rejects_oversized_event_page(mesh, monkeypatch):
+    a, b, _ = mesh
+    client = Client(a, b.id)
+    monkeypatch.setattr(client, 'request', lambda *a, **k: {'events': [None] * 501, 'next': None})
+    with pytest.raises(Invalid, match='page'):
+        client.sync_retractions()
+
+
+def test_concurrent_relay_requests_create_one_manager(mesh, monkeypatch):
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    a, b, c = mesh
+    created = []
+    class Manager:
+        def __init__(self, node, config, **kwargs):
+            created.append(self)
+            self.config = config
+            self.state = {'peers': {}}
+            time.sleep(.02)
+        def start(self):
+            return self
+        def request(self, peer, op, args):
+            return {'ok': True, 'result': peer}
+    monkeypatch.setattr('agentmesh.connectivity.load_config', lambda node: {'relay_only': True})
+    monkeypatch.setattr('agentmesh.connectivity.Connectivity', Manager)
+    try:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda peer: Client(a, peer).request('capabilities'), [b.id, c.id] * 2))
+        assert results == [b.id, c.id] * 2
+        assert len(created) == 1
+    finally:
+        a.connectivity = None
+
+
+@pytest.mark.parametrize('host,address,family', [
+    ('::ffff:127.0.0.1', '::ffff:127.0.0.1', socket.AF_INET6),
+    ('blocked.example', '127.0.0.1', socket.AF_INET),
+])
+def test_direct_cidr_blocks_apply_before_dns_or_mapped_address_connect(mesh, monkeypatch, host, address, family):
+    from agentmesh.network import peer_socket
+    a, b, _ = mesh
+    a.defense.block('cidr', '127.0.0.0/8')
+    monkeypatch.setattr(socket, 'getaddrinfo', lambda *args, **kwargs: [
+        (family, socket.SOCK_STREAM, 6, '', (address, 7443))])
+    def forbidden(*args, **kwargs):
+        raise AssertionError('blocked destination socket created')
+    monkeypatch.setattr(socket, 'socket', forbidden)
+    with pytest.raises(Denied, match='blocked'):
+        peer_socket(a, b.id, host, 7443)
+
+
+def test_live_fetch_does_not_import_unrelated_withdrawal_history(mesh, monkeypatch):
+    from agentmesh.crypto import sign
+    from agentmesh.records import RETRACT_DOMAIN
+    a, b, _ = mesh
+    b.trust(a.card(port=7443), ['public'])
+    history = [sign(a.identity.key, RETRACT_DOMAIN,
+        {'version': 1, 'origin': a.id, 'target': f'{i:064x}'}) for i in range(300)]
+    live_id = publish(a, 'live memory', audience=['@public'])
+    live_obj = a.get(live_id, b.id)
+    client = Client(b, a.id)
+    monkeypatch.setattr(client, 'request', lambda op, **args:
+        live_obj if op == 'get' else {'events': history, 'next': None})
+    assert client.fetch(live_id) == live_id
+    assert b.db.execute('SELECT count(*) FROM retractions').fetchone()[0] == 0
+    assert b.inspect(live_id)['state'] == 'pending'
+    assert b.db.execute('SELECT count(*) FROM transit_cache').fetchone()[0] == 1
+
+
+def test_requested_withdrawal_after_long_history_blocks_import_and_reshare(mesh, monkeypatch):
+    from agentmesh.crypto import sign
+    from agentmesh.records import RETRACT_DOMAIN
+    a, b, _ = mesh
+    b.trust(a.card(port=7443), ['public'])
+    history = [sign(a.identity.key, RETRACT_DOMAIN,
+        {'version': 1, 'origin': a.id, 'target': f'{i:064x}'}) for i in range(300)]
+    rid = publish(a, 'later withdrawn', audience=['@public'])
+    obj = a.get(rid, b.id)
+    history.append(a.retract(rid))
+    client = Client(b, a.id)
+    monkeypatch.setattr(client, 'request', lambda op, **args:
+        obj if op == 'get' else {'events': history, 'next': None})
+    with pytest.raises(Denied, match='withdrawn'):
+        client.fetch(rid)
+    assert b._row(rid) is None
+    assert b._withdrawn(rid, a.id)
+    assert not b.db.execute('SELECT 1 FROM transit_cache').fetchone()

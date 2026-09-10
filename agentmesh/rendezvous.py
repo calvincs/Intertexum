@@ -54,6 +54,10 @@ class Rendezvous:
         b=validate(obj,d.node.id,d.network)
         origin=b['origin'];args=b['args'];action=b['action']
         if d.node.defense.blocked(source=source,peer=origin): raise Denied('signaling identity blocked')
+        if not d.node.defense.consume([('signaling:peer:'+origin,2,8)]):
+            from .defense import RateLimited
+            d.node.defense.failure(source,peer=origin,event='signaling_rate')
+            raise RateLimited('signaling identity rate limited',1)
         # Observe is usable before registration, but discloses only the caller's
         # socket address. Other signaling requires live, non-removed registration.
         if action=='observe' and not args:

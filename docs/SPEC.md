@@ -29,7 +29,9 @@ network grants no private privileges. Receiver-local grants bind a known identit
 to read, publish, and/or message rights for 60 seconds to seven days. Each node may
 revoke those grants or block a peer. These changes do not alter other nodes' policy.
 
-New local records are private. Explicit publication signs an audience:
+New local records are private and searchable only by the local owner. Published
+drafts remain inspectable but are suppressed from search. Explicit publication
+signs an audience:
 
 - `@public`: discovered public peers may find/read the record.
 - Named identities: only named recipients with local read authorization, and the author.
@@ -56,12 +58,16 @@ splits up to 32 KiB into at most 64 private chunks, atomically. Model errors nev
 silently substitute another embedding space. See [EMBEDDINGS.md](EMBEDDINGS.md).
 
 Search combines lexical BM25 and cosine similarity through reciprocal-rank fusion.
-A request returns at most 20 results within a byte and CPU budget. Federated search
+An incremental lexical/vector index selects at most 256 candidates for full
+provenance validation; coverage declares this candidate bound. A request returns
+at most 20 results within a byte and CPU budget. Federated search
 queries at most eight selected peers with four concurrent requests, verifies hits,
 and reports partial coverage. Search is peer-to-peer, not routed through seeds.
 
 Withdrawals are signed by the original author. They take effect when learned and
 persist across restarts; disconnected peers may retain or serve stale copies.
+Local, matching stored-target, and unknown foreign withdrawals have independent
+10,000-event reserves; unknown targets also have per-origin and supplier bounds.
 Revoking access cannot force a recipient to erase previously received plaintext.
 
 ## Conversations and delivery
@@ -73,7 +79,8 @@ has one host; retiring it prevents late replies from recreating it.
 
 Direct queued messages are signed and expire within seven days. Managed runtimes
 persist an outbox before delivery, retry the same object with bounded backoff,
-and deduplicate at the recipient even after inbox acknowledgment. Acknowledgment
+and deduplicate at the recipient even after inbox acknowledgment. Up to four
+destinations progress concurrently with paced FIFO delivery within each peer. Acknowledgment
 means stored, not processed. Thread replies can also queue for their host.
 
 These are encrypted transport channels, not MLS group encryption or a replicated
@@ -109,7 +116,11 @@ HTTP MCP service or remote administration RPC. Runtime management is tested on L
 Wire domains, `mesh_` tool names, `agentmesh://` resources, and existing network IDs
 retain their names. Schema additions preserve existing private audiences and
 identities; old peers may reject newer public/thread/message features. Upgrade all
-participants in a private pilot before relying on those features.
+participants in a private pilot before relying on those features. The additive
+peer-capabilities RPC, exposed locally as mesh_peer_status, reports feature/model
+support and the receiver's current grants to the requesting identity. Unsupported
+older peers do not implicitly grant permission. Shared execution enforces the
+same owner capabilities for MCP and JSONL.
 
 ## Limits
 
@@ -117,7 +128,8 @@ No deployed public seeds, global completeness, guaranteed background replication
 compromised-key recovery authority, disk encryption, multi-tenant local principals,
 or production availability guarantee is included. The reproducible tests cover
 selected local topologies. A hosted WAN/CGNAT pilot remains required before
-production claims. See [ROADMAP.md](ROADMAP.md) and [VALIDATION.md](VALIDATION.md).
+production claims. See [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md),
+and the explicit [operating envelope and recovery policy](OPERATING_LIMITS.md).
 
 ## Opportunistic public caching
 

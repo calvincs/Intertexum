@@ -12,15 +12,21 @@ import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from collections import OrderedDict
+from copy import deepcopy
 
 from .crypto import Identity, Invalid, Denied, canonical, decode, certificate, public_id, sign, verify, valid_id
 from .records import (RECORD_DOMAIN, RETRACT_DOMAIN, MESSAGE_DOMAIN, MAX_DEPTH, SearchBudget,
-                      validate_record, vector, text, rank)
+                      validate_record, vector, text, rank, SearchIndex, check_budget)
 
 PERMISSIONS = {"read", "publish", "message", "public"}
 SEARCH_LIMIT = 20
 MAX_RECORDS = 10000
 MAX_EVENTS = 10000
+MAX_UNKNOWN_RETRACTIONS_PER_ORIGIN = 256
+MAX_UNKNOWN_RETRACTIONS_PER_SUPPLIER = 512
+SEARCH_CANDIDATES = 256
+VERIFICATION_CACHE_BYTES = 16 * 1024 * 1024
 
 
 class Node:
@@ -35,6 +41,13 @@ class Node:
         self.model, self.dimensions = config["model"], config["dimensions"]
         self.lock = threading.RLock()
         self.active_mutations=set()
+        self._verified_wires = OrderedDict()
+        self._verified_bytes = 0
+        self._search_index = None
+        self._indexed_versions = {}
+        self._search_data_version = None
+        self._search_epoch = 0
+        self._search_rebuilding = False
         self.db = sqlite3.connect(self.directory / "mesh.sqlite", check_same_thread=False,
                                   isolation_level=None, timeout=10)
         self.db.row_factory = sqlite3.Row
@@ -53,6 +66,21 @@ class Node:
                 wire TEXT NOT NULL, UNIQUE(origin,target));
             CREATE TABLE IF NOT EXISTS messages (
                 id TEXT PRIMARY KEY, wire TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS retraction_sources (
+                id TEXT PRIMARY KEY, supplier TEXT NOT NULL, allocation TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS retraction_allocations ON retraction_sources(allocation,supplier);
+            CREATE TABLE IF NOT EXISTS published_private (id TEXT PRIMARY KEY);
+            CREATE TABLE IF NOT EXISTS search_dirty (id TEXT PRIMARY KEY);
+            CREATE TRIGGER IF NOT EXISTS records_search_insert AFTER INSERT ON records BEGIN
+                INSERT OR IGNORE INTO search_dirty VALUES(NEW.id);
+            END;
+            CREATE TRIGGER IF NOT EXISTS records_search_update AFTER UPDATE ON records BEGIN
+                INSERT OR IGNORE INTO search_dirty VALUES(OLD.id);
+                INSERT OR IGNORE INTO search_dirty VALUES(NEW.id);
+            END;
+            CREATE TRIGGER IF NOT EXISTS records_search_delete AFTER DELETE ON records BEGIN
+                INSERT OR IGNORE INTO search_dirty VALUES(OLD.id);
+            END;
         """)
 
         from .lifecycle import schema as lifecycle_schema
@@ -62,6 +90,9 @@ class Node:
         conversation_schema(self)
         from .cache import schema as cache_schema
         cache_schema(self)
+        self._migrate_retractions()
+        # Rebuild once during startup, outside a remote request's time budget.
+        self._refresh_search_index()
 
     @classmethod
     def create(cls, directory, *, model=None, dimensions=None):
@@ -80,6 +111,7 @@ class Node:
     @contextmanager
     def transaction(self):
         with self.lock:
+            search_epoch = self._search_epoch
             self.db.execute('SAVEPOINT node_change')
             try:
                 yield
@@ -87,6 +119,10 @@ class Node:
             except BaseException:
                 self.db.execute('ROLLBACK TO node_change')
                 self.db.execute('RELEASE node_change')
+                # A nested read may have indexed uncommitted mutations.
+                if self._search_epoch != search_epoch:
+                    self._search_index = None
+                    self._refresh_search_index()
                 raise
 
     def close(self):
@@ -189,6 +225,127 @@ class Node:
         except (KeyError, TypeError) as exc:
             raise Invalid("invalid record") from exc
 
+    def _stored_record(self, row, *, private=False):
+        """Cache immutable wire verification only; authorization is always live."""
+        wire = row['wire']
+        entry = self._verified_wires.get(row['id'])
+        if entry and entry[0] == wire and entry[1] == private:
+            obj = entry[2]
+            origin = obj['body']['origin']
+            pin = self.identity.pem
+            if origin != self.id:
+                peer = self.peer(origin)
+                permissions = peer['permissions']
+                pin = peer['card']['certificate']
+                if 'publish' not in permissions and not (
+                        'public' in permissions and obj['body']['audience'] == ['@public']):
+                    raise Denied('origin cannot publish private memory')
+            if entry[3] == pin:
+                self._verified_wires.move_to_end(row['id'])
+                return obj
+        obj = decode(wire.encode())
+        if not isinstance(obj, dict) or obj.get('id') != row['id']:
+            raise Invalid('stored record ID mismatch')
+        self._verified_record(obj, private=private)
+        if entry:
+            self._verified_bytes -= len(entry[0])
+            del self._verified_wires[row['id']]
+        origin = obj['body']['origin']
+        pin = self.identity.pem if origin == self.id else self.peer(origin)['card']['certificate']
+        self._verified_wires[row['id']] = (wire, private, obj, pin)
+        self._verified_bytes += len(wire)
+        while self._verified_bytes > VERIFICATION_CACHE_BYTES:
+            _, removed = self._verified_wires.popitem(last=False)
+            self._verified_bytes -= len(removed[0])
+        return obj
+
+    def _refresh_search_index(self, deadline=None):
+        rebuilding = self._search_index is None
+        data_version = self.db.execute('PRAGMA data_version').fetchone()[0]
+        if rebuilding:
+            self._search_index = SearchIndex(self.dimensions)
+            self._indexed_versions = {}
+            self._search_rebuilding = True
+            self._search_epoch += 1
+            rows = self.db.execute('SELECT * FROM records').fetchall()
+        elif self._search_rebuilding or data_version != self._search_data_version:
+            # Another Node/owner connection may have drained the shared dirty
+            # table. Compare derived row versions before re-indexing its changes.
+            rows = self.db.execute('SELECT * FROM records').fetchall()
+            present = {row['id'] for row in rows}
+            for rid in set(self._indexed_versions) - present:
+                self._search_index.discard(rid)
+                del self._indexed_versions[rid]
+                self._search_epoch += 1
+        else:
+            rows = self.db.execute('SELECT r.* FROM search_dirty d CROSS JOIN records r WHERE r.id=d.id').fetchall()
+            for row in self.db.execute('SELECT d.id FROM search_dirty d LEFT JOIN records r USING(id) WHERE r.id IS NULL'):
+                self._search_index.discard(row['id'])
+                self._indexed_versions.pop(row['id'], None)
+                self._search_epoch += 1
+        for row in rows:
+            check_budget(deadline)
+            version = (hash(row['wire']), row['state'])
+            if self._indexed_versions.get(row['id']) == version:
+                continue
+            self._search_index.discard(row['id'])
+            self._search_epoch += 1
+            try:
+                obj = decode(row['wire'].encode())
+                if obj['id'] != row['id']:
+                    continue
+                body = obj['body']
+                validate_record(body, self.model, self.dimensions, private=row['state'] == 'private')
+                self._search_index.put(row['id'], body, row['state'])
+                # Recover original draft markers for pre-index databases too.
+                if body['origin'] == self.id and row['state'] == 'accepted':
+                    from .crypto import digest
+                    draft = {**body, 'audience': []}
+                    private_id = digest(RECORD_DOMAIN.encode() + b'\x00' + canonical(draft))
+                    self.db.execute('INSERT OR IGNORE INTO published_private VALUES(?)', (private_id,))
+            except (Invalid, KeyError, TypeError):
+                continue
+            self._indexed_versions[row['id']] = version
+        self.db.execute('DELETE FROM search_dirty')
+        self._search_data_version = data_version
+        self._search_rebuilding = False
+
+    def _search_eligible(self, requester, deadline):
+        """Cheap current-policy prefilter; _active checks every selected ancestry."""
+        from .onboarding import policy
+        caps = policy(self)
+        own = requester == self.id
+        reader = own or 'read' in self.peer(requester)['permissions']
+        origins = {self.id: {'publish', 'public'}}
+        for origin in {entry[1] for entry in self._search_index.entries.values()} - {self.id}:
+            try:
+                origins[origin] = set(self.peer(origin)['permissions'])
+            except Denied:
+                origins[origin] = set()
+        withdrawn = {(r[0], r[1]) for r in self.db.execute('SELECT target,origin FROM retractions')}
+        drafts = {r[0] for r in self.db.execute('SELECT id FROM published_private')}
+        transit = {r[0] for r in self.db.execute('SELECT id FROM transit_cache WHERE expires>?', (time.time(),))}
+        eligible = set()
+        for rid, (state, origin, audience) in self._search_index.entries.items():
+            check_budget(deadline)
+            public = audience == ('@public',)
+            if state == 'private':
+                if own and origin == self.id and rid not in drafts:
+                    eligible.add(rid)
+                continue
+            if state != 'accepted' and not (
+                    not own and rid in transit and public and caps['cache'] and caps['reshare']):
+                continue
+            if origin != self.id and ('publish' not in origins[origin] and not (public and 'public' in origins[origin])):
+                continue
+            if not own and origin != self.id and not caps['reshare']:
+                continue
+            if (rid, origin) in withdrawn:
+                continue
+            if requester == origin or public or (reader and (audience == ('*',) or requester in audience)):
+                eligible.add(rid)
+        return eligible
+
     def _row(self, rid):
         return self.db.execute("SELECT * FROM records WHERE id=?", (rid,)).fetchone()
 
@@ -197,6 +354,10 @@ class Node:
         if not self._row(obj["id"]) and self.db.execute("SELECT count(*) FROM records").fetchone()[0] >= MAX_RECORDS:
             raise Denied("node record quota reached")
         self.db.execute("INSERT OR IGNORE INTO records VALUES(?,?,?)", (obj["id"], wire, state))
+        if self._search_index is not None:
+            # Ordinary ingestion pays incremental indexing cost, not the next
+            # reader. Triggers still catch writes from another operator process.
+            self._refresh_search_index()
 
     def write_private(self, content, embedding, *, parents=()):
         self.capability('write')
@@ -251,15 +412,15 @@ class Node:
         row = self._row(rid)
         if row is None:return None
         cached=False
+        private = row['state'] == 'private' and requester == self.id
         if row['state']!='accepted':
             from .cache import eligible
             cached=row['state']=='pending' and (requester!=self.id or transit) and eligible(self,rid,reshare=requester!=self.id)
-            if not cached:return None
+            if not cached and not private:return None
         try:
-            obj = decode(row["wire"].encode())
-            if obj["id"] != rid:
-                return None
-            body = self._verified_record(obj)
+            obj = self._stored_record(row, private=private)
+            body = obj['body']
+            if private and body['origin'] != self.id:return None
             if cached and body['audience']!=['@public']:return None
             if requester!=self.id and body['origin']!=self.id:
                 from .onboarding import policy
@@ -337,7 +498,7 @@ class Node:
             obj = self._active(rid, requester)
             if obj is None:
                 raise Denied("record unavailable")
-            return obj
+            return deepcopy(obj)
 
     def search(self, requester, *, query_text="", query_vector=None, model=None, k=10):
         self.capability("search" if requester==self.id else "serve_memory")
@@ -355,11 +516,17 @@ class Node:
                 raise Invalid("search needs text or a vector")
             memo = {}
             deadline = time.monotonic()+.5 if requester!=self.id else None
-            records = [obj for row in self.db.execute("SELECT id FROM records WHERE state='accepted' OR id IN (SELECT id FROM transit_cache)").fetchall()
-                       if (obj := self._active(row["id"], requester, memo=memo,deadline=deadline)) is not None]
-            return {"results": rank(records, query_vector, query_text, k,deadline=deadline),
+            self._refresh_search_index(deadline)
+            eligible = self._search_eligible(requester, deadline)
+            candidates, limited = self._search_index.candidates(
+                eligible, query_vector, query_text, SEARCH_CANDIDATES, deadline=deadline)
+            records = [obj for rid in candidates
+                       if (obj := self._active(rid, requester, memo=memo,deadline=deadline)) is not None]
+            return {"results": deepcopy(rank(records, query_vector, query_text, k,deadline=deadline)),
                     "coverage": {"responding_peer": self.id, "scope": "authorized_local_records",
-                                 "records_considered": len(records), "network_complete": False}}
+                                 "records_considered": len(records), "network_complete": False,
+                                 "candidate_limit": SEARCH_CANDIDATES,
+                                 "candidate_limited": limited}}
 
     def retract(self, rid):
         with self.lock:
@@ -374,8 +541,31 @@ class Node:
             self.ingest_retraction(obj)
             return obj
 
-    def ingest_retraction(self, obj):
-        with self.lock:
+    def _retraction_allocation(self, origin, target):
+        if origin == self.id:
+            return 'local'
+        row = self._row(target)
+        if row:
+            try:
+                if decode(row['wire'].encode())['body']['origin'] == origin:
+                    return 'stored'
+            except (Invalid, KeyError, TypeError):
+                pass
+        return 'unknown'
+
+    def _migrate_retractions(self):
+        # Preserve all legacy tombstones, including stores already above one of
+        # the new foreign limits. New local withdrawals have an independent pool.
+        with self.transaction():
+            rows = self.db.execute('''SELECT r.* FROM retractions r
+                LEFT JOIN retraction_sources s USING(id) WHERE s.id IS NULL''').fetchall()
+            for row in rows:
+                allocation = self._retraction_allocation(row['origin'], row['target'])
+                self.db.execute('INSERT INTO retraction_sources VALUES(?,?,?)',
+                                (row['id'], row['origin'], allocation))
+
+    def ingest_retraction(self, obj, *, supplier=None, requested_record=None):
+        with self.transaction():
             try:
                 # A blocked origin may still withdraw its own content. Never allow
                 # an arbitrary relay to withdraw another origin's content.
@@ -385,14 +575,44 @@ class Node:
             if (set(body) != {"version", "origin", "target"} or type(body["version"]) is not int
                     or body["version"] != 1 or not valid_id(body["target"])):
                 raise Invalid("invalid retraction schema")
-            if self.db.execute("SELECT count(*) FROM retractions").fetchone()[0] >= MAX_EVENTS:
-                if not self._withdrawn(body["target"], body["origin"]):
-                    raise Denied("retraction quota reached; operator action required")
+            if self._withdrawn(body['target'], body['origin']):
+                return
+            supplier = body['origin'] if supplier is None else supplier
+            if supplier != self.id:
+                self.peer(supplier, allow_blocked=True)
+            allocation = self._retraction_allocation(body['origin'], body['target'])
+            requested_public = False
+            if (allocation == 'unknown' and isinstance(requested_record, dict)
+                    and requested_record.get('id') == body['target']
+                    and isinstance(requested_record.get('body'), dict)
+                    and requested_record['body'].get('origin') == body['origin']):
+                # A fetch must synchronize withdrawal before storing its record.
+                # Reserve capacity for that verified, specifically requested
+                # target without requiring a transient (possibly withdrawn) copy.
+                requested_body = self._verified_record(requested_record)
+                if not self._visible(requested_body, self.id):
+                    raise Denied('requested record is outside the local audience')
+                allocation = 'stored'
+                requested_public = requested_body['audience'] == ['@public']
+            if self.db.execute('SELECT count(*) FROM retraction_sources WHERE allocation=?',
+                               (allocation,)).fetchone()[0] >= MAX_EVENTS:
+                raise Denied(f'{allocation} retraction quota reached; keep tombstones and inspect capacity')
+            if allocation == 'unknown':
+                origin_count = self.db.execute('''SELECT count(*) FROM retractions r
+                    JOIN retraction_sources s USING(id) WHERE s.allocation='unknown' AND r.origin=?''',
+                    (body['origin'],)).fetchone()[0]
+                supplied = self.db.execute("SELECT count(*) FROM retraction_sources WHERE allocation='unknown' AND supplier=?",
+                                          (supplier,)).fetchone()[0]
+                if origin_count >= MAX_UNKNOWN_RETRACTIONS_PER_ORIGIN or supplied >= MAX_UNKNOWN_RETRACTIONS_PER_SUPPLIER:
+                    raise Denied('unknown-target retraction origin/supplier quota reached; inspect or block the source; never discard tombstones')
             target=self._row(body['target'])
-            if target and decode(target['wire'].encode())['body']['audience']==['@public']:
+            if allocation != 'unknown' and (requested_public or (
+                    target and decode(target['wire'].encode())['body']['audience']==['@public'])):
                 self.db.execute('INSERT OR IGNORE INTO public_tombstones VALUES(?)',(body['target'],))
             self.db.execute("INSERT OR IGNORE INTO retractions VALUES(?,?,?,?)",
                             (obj["id"], body["origin"], body["target"], canonical(obj).decode()))
+            self.db.execute('INSERT INTO retraction_sources VALUES(?,?,?)',
+                            (obj['id'], supplier, allocation))
 
     def retractions(self, requester, after=""):
         with self.lock:

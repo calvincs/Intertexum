@@ -16,7 +16,7 @@ quotas, abuse handling, privacy and credentials. Set up those services using
 BOOTSTRAP.md and CONNECTIVITY.md, then generate one private profile:
 
 ```bash
-agentmesh --data /path/to/operator profile-create \
+intertexum --data /path/to/operator profile-create \
   --seed /path/to/pinned-seed-card.json \
   --output /private/network-profile.json
 ```
@@ -110,12 +110,12 @@ a mutation. A restart does not clear receipts. Use explicit epoch retirement as 
 For new meshes of unrelated operators, prefer public discovery plus local grants:
 
 ```sh
-agentmesh --data /private/operator profile-create --public \
+intertexum --data /private/operator profile-create --public \
   --seed /private/seed-a-card.json --seed /private/seed-b-card.json \
   --seed /private/seed-c-card.json --network my-network-v1 \
   --output /private/network-profile.json
-agentmesh --data /private/agent onboard --profile /private/network-profile.json
-agentmesh --data /private/agent mcp-config
+intertexum --data /private/agent onboard --profile /private/network-profile.json
+intertexum --data /private/agent mcp-config
 ```
 
 Use actual operator-provided seed cards. Bootstrap endpoints are supplied through trusted profiles.

@@ -14,6 +14,12 @@ import time
 from .crypto import Denied, Invalid, valid_id
 
 
+class RateLimited(Denied):
+    def __init__(self, message, retry_after):
+        super().__init__(message)
+        self.retry_after=retry_after
+
+
 class Defense:
     def __init__(self, directory, *, clock=time.time):
         self.clock = clock
@@ -159,10 +165,12 @@ class Defense:
         if self.blocked(source=source): return False
         with self.lock:
             if self.db.execute('SELECT count(*) FROM evidence').fetchone()[0]>=10000: return False
-        rate,burst=(2,10) if role=='bootstrap' else (4,20)
+        # A bootstrap sees many legitimate identities sharing one NAT. Retain
+        # bounded admission without turning ordinary congestion into an IP ban.
+        rate,burst=(10,16) if role=='bootstrap' else (4,20)
         allowed=self.consume([(role+':ip:'+source,rate,burst)])
-        if not allowed: self.failure(source,event='connection_rate')
-        return allowed and self.consume([(role+':connections',20,40)])
+        if not allowed and role!='bootstrap': self.failure(source,event='connection_rate')
+        return allowed and self.consume([(role+':connections',40 if role=='bootstrap' else 20,40)])
 
     def operation(self, source, peer, op, role):
         if self.blocked(source=source,peer=peer): raise Denied('locally blocked')
@@ -172,7 +180,7 @@ class Defense:
             else:
                 keys=[('rpc:global',20,40),('rpc:peer:'+peer,10,30)]
         elif op=='connectivity':
-            keys=[('signaling:global',10,32),('signaling:ip:'+source,3,16)]
+            keys=[('signaling:global',10,32),('signaling:ip:'+source,8,24)]
         elif op=='deregister':
             keys=[('removal:global',2,8),('removal:ip:'+source,.2,4)]
         elif op in ('challenge','register'):
@@ -181,10 +189,10 @@ class Defense:
             keys=[('discovery:global',5,20),('discovery:'+source,2,10)]
         if not self.consume(keys[1:]):
             # Unauthenticated registration's claimed peer must never be punished.
-            self.failure(source,peer=peer if role=='data' else '',event='request_rate')
-            raise Denied('rate limited; back off before retrying')
+            if role=='data':self.failure(source,peer=peer,event='request_rate')
+            raise RateLimited('rate limited; back off before retrying',max(1,max(1/rate for _,rate,_ in keys[1:])))
         if not self.consume(keys[:1]):
-            raise Denied('global capacity limited; retry later')
+            raise RateLimited('global capacity limited; retry later',max(1,1/keys[0][1]))
 
     @contextmanager
     def search(self, source='', peer=''):

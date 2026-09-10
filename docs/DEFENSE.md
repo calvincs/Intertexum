@@ -6,8 +6,8 @@ summaries do not automatically expire. Repeat ban incidents now escalate up to a
 one-day temporary ban. A documented local retention-review path remains available.
 
 Bootstrap discovery introduces peers. Searches go directly to a chosen **data
-peer**. The bootstrap protocol accepts only challenge, registration and discovery
-operations; it neither receives nor forwards searches. One host may run both
+peer**. The bootstrap protocol accepts registration, discovery, removal and bounded
+signaling operations; it neither receives nor forwards searches. One host may run both
 listeners as separate roles. Federated search caps fan-out at eight peers and four concurrent requests.
 
 ## Shared baseline
@@ -21,9 +21,10 @@ untrusted accusation cannot create a network-wide ban.
 Before TLS, source-IP blocks and connection quotas apply. Source means the
 accepted socket address, never an announcement's advertised IP or a request
 header. There are 16 concurrent connection handlers, existing handshake/frame
-deadlines, and a global connection bucket of 20/sec with burst 40 per role.
+deadlines, and a global connection bucket of 20/sec for data and 40/sec for
+bootstrap, with burst 40 per role.
 Data listeners allow 4 connections/sec per source, burst 20; bootstrap listeners
-allow 2/sec, burst 10. Data request frames now cap at 128 KiB; responses remain
+allow 10/sec, burst 16, for aggregate shared-NAT traffic. Data request frames now cap at 128 KiB; responses remain
 bounded by the existing 2 MiB protocol maximum. Bootstrap requests cap at 16 KiB.
 
 An authenticated data request also checks the peer-ID block. Eight attributable
@@ -33,9 +34,14 @@ is attributed to the verified peer ID; pre-authentication failures are attribute
 to the observed source IP. Global capacity rejection and a busy search worker do
 not count as client abuse. No ban is created from an unverified claimed peer ID.
 
-IP quotas necessarily share capacity behind NAT. A pre-TLS flood can still cause
+IP quotas necessarily share capacity behind NAT. Data-listener pre-TLS abuse can still cause
 a shared-IP ban; separating authenticated identities does not solve that earlier
-stage. There are no automatic subnet bans. Operators may explicitly block CIDRs.
+stage. Bootstrap quota congestion instead returns backpressure without counting
+normal shared-NAT overload as abuse. Verified signaling identities have their own
+2/sec, burst-eight budget and attributable repeated abuse can still trigger a
+peer ban. Signaling also has global 10/sec and shared-IP 8/sec budgets. Structured
+seed rate-limit replies include retry_after seconds for bounded client backoff.
+There are no automatic subnet bans. Operators may explicitly block CIDRs.
 At most 1,000 live block rules, 4,096 quota entries and 4,096 failure counters are
 held. Expired bans are removed during checks and maintenance. Quotas/counters
 are per process and reset at restart; active bans and manual rules persist.
@@ -60,6 +66,9 @@ occur during provenance traversal and scoring. Exhaustion returns a denial,
 never an apparently complete empty or partial result. This is not hard CPU
 preemption: an individual signature check, regex operation, sort, SQLite wait or
 Python scheduling can overrun a checkpoint. Local operator search is exempt.
+An incremental lexical/vector index bounds full provenance verification to 256
+candidates; candidate_limited coverage exposes that retrieval limit. The immutable
+wire verification cache never caches grants or other access decisions.
 The existing node lock still serializes database operations, so an in-flight
 search can delay other data work until it finishes or reaches its budget.
 Production scale needs worker isolation/indexes and measured fairness under load.
@@ -90,13 +99,13 @@ may be denied; no completeness claim is made.
 ## Operator controls and audit
 
 ```bash
-agentmesh --data /path/to/node security-block --peer PEER_ID
-agentmesh --data /path/to/node security-block --cidr 203.0.113.0/24 --seconds 3600
-agentmesh --data /path/to/node security-status
-agentmesh --data /path/to/node security-audit
-agentmesh --data /path/to/node security-unblock --cidr 203.0.113.0/24
-agentmesh --data /path/to/node security-unblock --peer PEER_ID
-agentmesh --data /path/to/node bootstrap-forget PEER_ID
+intertexum --data /path/to/node security-block --peer PEER_ID
+intertexum --data /path/to/node security-block --cidr 203.0.113.0/24 --seconds 3600
+intertexum --data /path/to/node security-status
+intertexum --data /path/to/node security-audit
+intertexum --data /path/to/node security-unblock --cidr 203.0.113.0/24
+intertexum --data /path/to/node security-unblock --peer PEER_ID
+intertexum --data /path/to/node bootstrap-forget PEER_ID
 ```
 
 These commands are local-only. `security-block` denies direct activity and

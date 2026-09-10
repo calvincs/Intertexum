@@ -19,11 +19,7 @@ RESOURCES={
     'agentmesh://status':('Node status','application/json'),
     'agentmesh://policy':('Owner capability policy','application/json'),
 }
-REQUIRED={'cache_configure':('cache','retain'),'receipt_inspect':('retain',),'receipt_abandon':('retain',),'forget':('retain',),'write_document':('write',),'write':('write',),'publish':('publish',),'search':('search',),
-          'fetch':('network','fetch'),'approve':('approve',),'send':('network','send'),'sync':('network',),'authorize':('manage_access',),'retain':('retain',),
-          'maintenance':('retain',),'retire_receipts':('retain',),'federated_search':('network','search'),
-          'thread_retire':('threads','retain'),'thread_create':('threads','publish'),'thread_read':('threads',),'thread_reply':('threads','send'),
-          'queue_message':('send',),'outbox':('send',),'outbox_ack':('send',)}
+REQUIRED=agent.REQUIRED
 
 
 def enabled(node,name):
@@ -78,7 +74,6 @@ class LocalBackend:
             obj=request['request']
             if not isinstance(obj,dict) or not isinstance(obj.get('tool'),str):raise Invalid('invalid tool call')
             if obj['tool'] not in agent.DEFINITIONS:raise Invalid('unknown tool')
-            if not enabled(self.node,obj['tool']):raise Denied('capability_disabled:'+obj['tool'])
             if not self.operation.acquire(blocking=False):raise Denied('node_busy: retry later with the same idempotency key')
             try:return agent.call(self.node,obj)
             finally:self.operation.release()

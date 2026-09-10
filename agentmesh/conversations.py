@@ -2,17 +2,24 @@
 import time
 import uuid
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from .crypto import Invalid,Denied,canonical,decode,sign,verify,certificate,public_id,valid_id
 from .records import text,audience
 
 DOMAIN='agentmesh.thread.v1'
 PAGE_BYTES=512*1024
+DELIVERY_CONCURRENCY=4
+DELIVERY_PEER_INTERVAL=.5
+DELIVERY_DISPATCH_INTERVAL=.125
 
 
 def schema(node):
     node.db.executescript('''CREATE TABLE IF NOT EXISTS threads(id TEXT PRIMARY KEY,wire TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS posts(seq INTEGER PRIMARY KEY AUTOINCREMENT,id TEXT UNIQUE,thread TEXT,received INTEGER,wire TEXT);
       CREATE TABLE IF NOT EXISTS outbox(id TEXT PRIMARY KEY,peer TEXT,op TEXT,args TEXT,state TEXT,attempts INTEGER,next INTEGER,expires INTEGER,error TEXT);
+      CREATE INDEX IF NOT EXISTS outbox_due ON outbox(state,next);
+      CREATE INDEX IF NOT EXISTS outbox_expiry ON outbox(state,expires);
+      CREATE INDEX IF NOT EXISTS outbox_peer_state ON outbox(peer,state);
       CREATE TABLE IF NOT EXISTS received_ids(id TEXT PRIMARY KEY,expires INTEGER);
     ''')
     node.db.execute("INSERT OR IGNORE INTO received_ids SELECT id,coalesce(json_extract(wire,'$.body.expires'),0) FROM messages")
@@ -78,7 +85,13 @@ def accept(node,obj,requester):
     node.capability('threads');node.capability('receive')
     b=checked(obj)
     if b['kind']!='reply' or b['origin']!=requester:raise Invalid('reply sender mismatch')
-    if requester!=node.id and node.peer(requester)['card']['certificate']!=b['certificate']:raise Denied('reply certificate is not pinned')
+    if requester!=node.id:
+        # The transport authenticates the current pin. A durable signed reply
+        # may contain the previous self-issued certificate after same-key
+        # renewal; certificates are key containers, not new identities.
+        pinned=node.peer(requester)['card']['certificate']
+        if public_id(certificate(pinned).public_key())!=b['origin']:
+            raise Denied('reply key is not pinned')
     with node.transaction():
         root=_root(node,b['thread']);_access(node,root,requester)
         if root['body']['audience']!=['@public'] and requester!=node.id:node.require(requester,'message')
@@ -158,7 +171,7 @@ def queue_message(node,peer,content,ttl=604800):
 
 
 def reply(node,peer,thread,content,parent=None,ttl=604800):
-    node.capability('threads')
+    node.capability('threads');node.capability('send')
     if not valid_id(thread) or (parent is not None and not valid_id(parent)):raise Invalid('invalid thread or parent')
     obj=_body(node,'reply',content,thread=thread,parent=parent or thread)
     if peer==node.id:return accept(node,obj,node.id)
@@ -176,14 +189,38 @@ def deliveries(node,*,after='',limit=50,ack=None):
     return {'items':[dict(r) for r in rows[:limit]],'next':rows[limit-1]['id'] if len(rows)>limit else None}
 
 
-def deliver(node):
-    from .network import Client
+def _claim_delivery(node, *, paced=False):
+    """Claim the oldest queued entry for one idle peer, respecting retry delay."""
     node.capability('send');node.capability('network')
     now=int(time.time())
     with node.transaction():
         node.db.execute("UPDATE outbox SET state='expired' WHERE state='queued' AND expires<=?",(now,))
-        rows=node.db.execute("SELECT * FROM outbox WHERE state='queued' AND next<=? ORDER BY next LIMIT 1",(now,)).fetchall()
-    for row in rows:
+        active=getattr(node,'_delivery_peers',None)
+        if active is None:
+            active=node._delivery_peers=set()
+        # Only a peer's enqueue-order head can run. A predecessor in backoff
+        # still blocks its successors, including replies with causal parents.
+        excluded_peers=set(active)
+        if paced:
+            excluded_peers.update(peer for peer,ready in getattr(node,'_delivery_ready',{}).items()
+                                  if ready>time.monotonic())
+        excluded=' AND q.peer NOT IN ('+','.join('?' for _ in excluded_peers)+')' if excluded_peers else ''
+        row=node.db.execute("""SELECT q.* FROM outbox q
+            WHERE q.state='queued' AND q.next<=?
+            AND NOT EXISTS (SELECT 1 FROM outbox prior WHERE prior.peer=q.peer
+                AND prior.state='queued' AND prior.rowid<q.rowid)
+            """+excluded+' ORDER BY q.next,q.rowid LIMIT 1',(now,*excluded_peers)).fetchone()
+        if row is not None:
+            active.add(row['peer'])
+            return row
+    return None
+
+
+def _deliver_claimed(node,row):
+    from .network import Client
+    try:
+        # Policy may have changed after the scheduler claimed this entry.
+        node.capability('send');node.capability('network')
         try:
             result=Client(node,row['peer']).request(row['op'],**decode(row['args'].encode()))
             if result.get('id')!=row['id']:raise Invalid('delivery acknowledgement mismatch')
@@ -191,20 +228,58 @@ def deliver(node):
         except Exception as exc:state='queued';error=type(exc).__name__+': '+str(exc)[:150]
         with node.transaction():
             node.db.execute('UPDATE outbox SET state=?,attempts=attempts+1,next=?,error=? WHERE id=?',(state,int(time.time())+min(300,2**min(row['attempts']+1,9)),error,row['id']))
+            if state=='delivered':
+                if not hasattr(node,'_delivery_ready'):node._delivery_ready={}
+                node._delivery_ready[row['peer']]=time.monotonic()+DELIVERY_PEER_INTERVAL
+    finally:
+        with node.lock:
+            node._delivery_peers.discard(row['peer'])
+
+
+def deliver(node):
+    """Synchronous single attempt, also safe alongside the managed worker."""
+    row=_claim_delivery(node)
+    if row is not None:
+        _deliver_claimed(node,row)
 
 
 class DeliveryWorker:
-    def __init__(self,node):self.node=node;self.stop=threading.Event();self.thread=threading.Thread(target=self.run,daemon=True);node.delivery_worker=self;node.delivery_error=None
+    def __init__(self,node):
+        self.node=node
+        self.stop=threading.Event()
+        self.thread=threading.Thread(target=self.run,daemon=True)
+        node.delivery_worker=self
+        node.delivery_error=None
+
     def run(self):
         last_sweep=0
-        while not self.stop.wait(2):
-            try:
-                if time.monotonic()-last_sweep>60:
-                    from .cache import sweep
-                    sweep(self.node);last_sweep=time.monotonic()
-                deliver(self.node)
-            except Exception as exc:self.node.delivery_error=type(exc).__name__
-            else:self.node.delivery_error=None
+        next_dispatch=0
+        active=set()
+        # Joining the executor on close prevents a request from accessing a
+        # closed node database. Requests retain the transport's bounded timeout.
+        with ThreadPoolExecutor(max_workers=DELIVERY_CONCURRENCY,thread_name_prefix='mesh-delivery') as pool:
+            while not self.stop.is_set():
+                try:
+                    completed={future for future in active if future.done()}
+                    active.difference_update(completed)
+                    for future in completed:future.result()
+                    if time.monotonic()-last_sweep>60:
+                        from .cache import sweep
+                        sweep(self.node);last_sweep=time.monotonic()
+                    while len(active)<DELIVERY_CONCURRENCY and not self.stop.is_set():
+                        if time.monotonic()<next_dispatch:break
+                        row=_claim_delivery(self.node,paced=True)
+                        if row is None:break
+                        try:active.add(pool.submit(_deliver_claimed,self.node,row))
+                        except BaseException:
+                            with self.node.lock:self.node._delivery_peers.discard(row['peer'])
+                            raise
+                        # Leave room in normal receiver quotas for interactive
+                        # traffic while draining a backlog without source bans.
+                        next_dispatch=time.monotonic()+DELIVERY_DISPATCH_INTERVAL
+                except Exception as exc:self.node.delivery_error=type(exc).__name__
+                else:self.node.delivery_error=None
+                self.stop.wait(.05 if active else .5)
     def start(self):self.thread.start()
     def close(self):self.stop.set();self.thread.join()
 
