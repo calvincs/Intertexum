@@ -8,8 +8,8 @@ Intertexum provides an official-SDK MCP server over **stdio**. The harness
 launches the adapter and discovers native tools and resources. The mesh transport
 between nodes remains pinned TLS or ICE/DTLS/TURN; MCP connects the harness to its
 local node. No public MCP HTTP listener or bootstrap administration is exposed.
-The adapter uses the pinned MCP Python SDK 1.30.0 (v1 protocol compatibility), not
-the SDK's experimental next-major interface.
+The adapter uses the pinned MCP Python SDK 2.1.1 with explicit request handlers
+and structured tool and resource results.
 
 ## One node per harness session
 
@@ -137,7 +137,7 @@ lifetime. A real mutual-TLS peer delivers a message while no MCP session exists;
 a later attached session reads it. The full regression suite remains the baseline
 for the underlying mesh authorization and NAT transport.
 
-References: [official Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v1.30.0),
+References: [official Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v2.1.1),
 [MCP transport specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
 
 Caching tools: `mesh_cache_status` reports temporary public copies and locally
