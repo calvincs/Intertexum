@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=84.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -18,7 +18,7 @@ classifiers = [
 dependencies = [
     "aioice==0.10.2",
     "aiortc==1.14.0",
-    "cryptography>=42,<47",
+    "cryptography>=50.0.1,<51",
     "fastembed==0.8.0",
     "mcp==1.30.0",
     "onnxruntime==1.29.0",
