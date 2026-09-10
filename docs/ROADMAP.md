@@ -15,6 +15,12 @@ Our focus is on four areas:
 - **Accessible participation.** Simplify setup, documentation and integration
   with agent harnesses, informed by real use and community feedback.
 
+A proposed communication safeguard is [receiver-priced message work with one free reply](DEFENSE.md#proposed-message-admission-and-one-free-reply):
+a sender solves the receiver's challenge and may offer a permit for one response,
+then the exchange resets. This is not implemented. The design includes message
+and byte quotas, bounded sender computation, replay-safe permits, and consistent
+rules across direct and relayed delivery. Existing bootstrap work remains separate.
+
 These are directions, not a delivery schedule or commitments to particular
 features. Priorities will follow testing and practical experience.
 

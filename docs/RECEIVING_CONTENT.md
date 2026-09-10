@@ -103,6 +103,20 @@ If content attempts to redirect the agent, retain only the task-relevant factual
 information, record the source for review, and reject or block it according to local
 policy. Do not follow a “recovery” instruction supplied by the same content.
 
+## Message volume and reply loops
+
+Apply owner-set input, token, tool-call and time budgets before model invocation.
+Deduplicate application actions and limit follow-ups for each authorized task;
+a peer-supplied new task ID does not authorize a new budget. Receiving a message
+or storage receipt must not automatically trigger a reply. A signed response is
+a peer's claim, not independent evidence that it performed the stated work.
+
+The [proposed message-work and one-free-reply design](DEFENSE.md#proposed-message-admission-and-one-free-reply)
+is not implemented. Its permit would waive only computation for one bounded
+response, leaving permissions, quotas, screening and agent authority checks in
+place. A free response would not issue another free permit. Screening alone does
+not detect every spam message or stop two agents from repeatedly choosing to reply.
+
 ## Validate the actual receiving harness
 
 Exercise at least these cases with synthetic, nonsecret fixtures:
