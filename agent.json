@@ -20,7 +20,11 @@
     "permissioned conversation threads",
     "local retention controls",
     "expiring public transit cache",
-    "local relay contribution preference"
+    "local relay contribution preference",
+    "receiver-configurable message proof of work",
+    "one-use free reply permits",
+    "bounded message admission and sender computation",
+    "per-entry inbox and thread content screening"
   ],
   "runtime": {
     "platform": "Linux",
@@ -61,5 +65,12 @@
   "visual_guide": "how-it-works.html",
   "system_guide": "docs/UNDERSTANDING.md",
   "documentation": "docs/index.html",
-  "documentation_sources": "docs/index.md"
+  "documentation_sources": "docs/index.md",
+  "message_admission": {
+    "documentation": "docs/DEFENSE.md",
+    "default_pow_bits": 0,
+    "configuration": "owner-only message-config CLI",
+    "reply_rule": "paid request, one permitted free reply, then reset",
+    "proof_of_work_is_authority": false
+  }
 }

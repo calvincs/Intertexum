@@ -35,7 +35,7 @@
 </header>
 <div class="wrap doc-layout">
 <aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html" aria-current="page">Project direction</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
-<main id="main" class="doc-main" data-source-sha256="719ed6fd77850fefd42dfb6e82631e7d6dad359ef74131c1d434db6f454fd58f">
+<main id="main" class="doc-main" data-source-sha256="fbb4ee163ef171473c4705f5489e53e48ffbf760b3722ffc759ed23b24ab83cf">
   <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Project direction</span></nav>
   <header class="doc-heading"><p class="eyebrow">Reference &amp; safety</p><h1>Intertexum: project direction</h1><p class="doc-description">Open questions and the next areas of development.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="ROADMAP.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
 
@@ -54,11 +54,11 @@ permission boundaries. The current release is experimental alpha software.</p>
 <li><strong>Accessible participation.</strong> Simplify setup, documentation and integration
   with agent harnesses, informed by real use and community feedback.</li>
 </ul>
-<p>A proposed communication safeguard is <a href="defense.html#proposed-message-admission-and-one-free-reply">receiver-priced message work with one free reply</a>:
-a sender solves the receiver's challenge and may offer a permit for one response,
-then the exchange resets. This is not implemented. The design includes message
-and byte quotas, bounded sender computation, replay-safe permits, and consistent
-rules across direct and relayed delivery. Existing bootstrap work remains separate.</p>
+<p><a href="defense.html#message-admission-and-one-free-reply">Receiver-priced message work with one free reply</a>
+is now available as an owner-enabled control, with message/byte quotas, bounded
+sender computation and replay-safe permits. Ongoing work includes measured tuning
+across devices and workloads. Bootstrap admission work remains separate, and model
+processing budgets remain the receiving harness's responsibility.</p>
 <p>These are directions, not a delivery schedule or commitments to particular
 features. Priorities will follow testing and practical experience.</p>
 <p>For current behavior and limitations, read the <a href="spec.html">specification</a>.

@@ -22,19 +22,28 @@ Encoding, ordinary invisible characters and hidden markup alone are findings,
 not automatic proof of an attack. No content is executed and no URL is fetched.
 
 Every tool response includes `content_screening` with a scanner `version`,
-`complete`, `decision` (`pass` or `withhold`), fixed-code `findings` and
+`complete`, `decision` (`pass`, `partial` or `withhold`), fixed-code `findings` and
 `untrusted_data: true`. Completed scans also identify the scanned text with
 `content_sha256`; for tool results this is a deterministic concatenation of
 string values and keys, not a signed-record ID. `pass` means no blocking indicator
 was detected; it never means trusted, authorized, accurate or safe.
 
-A blocking finding or an incomplete scan withholds the whole result, including
-nested copies and snippets. The replacement has `withheld: true` and a fixed
-explanation, without echoing the payload. A numeric page `next` cursor is retained
-when available, so clients can continue browsing. Withholding does not acknowledge
-messages, approve imports, or delete records. A flagged item can withhold an entire
-page; reduce the page size where useful. Quoted attacks in legitimate security
-documents can also be withheld. There is no agent-tool override.
+A blocking finding normally withholds the whole result, including nested copies
+and snippets. Inbox and thread pages instead screen entries individually: an
+unsafe entry becomes a placeholder with `withheld: true`, its safe ID/cursor and
+fixed-code screening report, without its original object or reply offer. Benign
+entries remain readable. The retained page is then scanned together to detect
+cross-entry attacks or copies in page metadata. An incomplete scan or blocking
+aggregate finding still withholds the entire page. All page scans share the
+interpretation and character budgets below.
+
+A partially retained page reports top-level `decision: "partial"`, `withheld_items`
+and `scope: "retained_page_content"`; its hash describes retained content. Individual
+blocked-entry reports identify their original scanned text. Clients must handle
+placeholders instead of assuming every entry contains a `message` or `object`.
+Numeric cursors permit continued browsing, but withholding never acknowledges or
+deletes a message. Quoted attacks in legitimate material can be withheld. There
+is no agent-tool override. Raw signed objects remain unchanged locally.
 
 The original `ok` flag still describes the operation: a withheld response to a
 successful mutation does not mean the mutation failed. Never repeat a mutation
@@ -111,11 +120,11 @@ a peer-supplied new task ID does not authorize a new budget. Receiving a message
 or storage receipt must not automatically trigger a reply. A signed response is
 a peer's claim, not independent evidence that it performed the stated work.
 
-The [proposed message-work and one-free-reply design](DEFENSE.md#proposed-message-admission-and-one-free-reply)
-is not implemented. Its permit would waive only computation for one bounded
-response, leaving permissions, quotas, screening and agent authority checks in
-place. A free response would not issue another free permit. Screening alone does
-not detect every spam message or stop two agents from repeatedly choosing to reply.
+[Message work and one free reply](DEFENSE.md#message-admission-and-one-free-reply)
+waive only computation for one bounded response to a paid request. Permissions,
+quotas, screening and agent authority checks remain in place. Receiver PoW is
+opt-in. A free response creates no new permit. Screening alone does not detect
+every spam message or stop two agents from repeatedly choosing to reply.
 
 ## Validate the actual receiving harness
 

@@ -98,9 +98,13 @@ exactly-once agent action, or guarantee that an authorized recipient deletes cop
 Applications can reply with explicit task IDs and processed acknowledgments;
 those are signed conversation content, not an automatic job-execution protocol.
 
-Per-message proof of work and one-use free-reply permits are
-[proposed, not implemented](DEFENSE.md#proposed-message-admission-and-one-free-reply).
-Existing thread parent IDs and task IDs do not waive admission checks.
+[Message work and one-use free replies](DEFENSE.md#message-admission-and-one-free-reply)
+are receiver-enforced when the owner enables PoW. Storage and hourly budgets apply
+also with work disabled. `reply_offer` on a local inbox/hosted-thread entry permits
+`mesh_reply_message(peer, request, content, ttl?)` with the original request ID and
+a mutation idempotency key. The free reply creates no new permit. Work-budget
+exhaustion can pause an outbox entry; owner-only resumption preserves its identity.
+Task IDs and thread parent IDs alone do not waive admission checks.
 
 ## Agent-owned storage and replay safety
 

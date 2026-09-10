@@ -35,7 +35,7 @@
 </header>
 <div class="wrap doc-layout">
 <aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html" aria-current="page">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
-<main id="main" class="doc-main" data-source-sha256="e3488673e981ca06e1e4d00115b7378eb92c0198c9c1cfdd51bd57230617d44e">
+<main id="main" class="doc-main" data-source-sha256="2fe66323c6e02a81d961ae5a22dcc5506a059c813bd2cb30304ca8f8292bf249">
   <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Validation status</span></nav>
   <header class="doc-heading"><p class="eyebrow">Network &amp; operations</p><h1>Validation</h1><p class="doc-description">What has been tested and which deployment claims still need evidence.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="VALIDATION.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
 
@@ -87,12 +87,24 @@ operator-pilot validation remain release-stage work.</p>
 <p>Additional machines on the same LAN can validate process supervision, restart,
 host differences and sustained traffic. They do not reproduce independent ISP
 paths or carrier-grade NAT. Task usefulness, receiving-harness behavior and
-extended WAN deployment remain separate validation work.</p></article>
+extended WAN deployment remain separate validation work.</p>
+<h2 id="message-admission-and-free-replies">Message admission and free replies</h2>
+<p>The messaging suite covers required work, ticket binding/tampering, expiry, live
+policy changes, sender computation limits, storage/hourly quotas, atomic permit
+redemption, restart/cleanup replay protection, and refusal to chain free replies.
+Real local TLS and ICE tests exercise paid requests and free responses. The
+isolated two-NAT coturn lab also verifies message work and a one-use free response
+through TURN/TCP with direct UDP blocked, alongside reconnect and relay-only tests.
+Fixtures use deliberately low difficulty for functional coverage, not production
+cost calibration. These checks are not a security audit or a load certification.</p>
+<p>Inbox/thread screening tests cover per-entry withholding, retained benign content,
+cross-entry/metadata attacks and fail-closed shared scan budgets. Raw signed
+objects and delivery/permit state remain unchanged by tool-output screening.</p></article>
   <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="VALIDATION.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
   <nav class="doc-adjacent" aria-label="Continue reading"><a href="erasure.html">← Previous · Bootstrap deregistration</a><a href="spec.html">Next → · Protocol specification</a></nav>
   <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
 </main>
-<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#isolated-real-nat-lab">Isolated real-NAT lab</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
+<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#isolated-real-nat-lab">Isolated real-NAT lab</a></li><li class="toc-level-2"><a href="#message-admission-and-free-replies">Message admission and free replies</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
 </div>
 <footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
 </body>

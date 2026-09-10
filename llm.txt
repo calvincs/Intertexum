@@ -274,12 +274,25 @@ do not retry with a fresh key. No agent tool bypasses screening. Raw operator
 CLI/Python access remains outside this boundary. See docs/RECEIVING_CONTENT.md
 for scope, limits, false positives, owner review and client handling.
 
-## Proposed message admission (not available yet)
+## Message work and one free reply
 
-Receiver-priced message proof of work and one-use free-reply permits are proposed,
-not implemented. See docs/DEFENSE.md#proposed-message-admission-and-one-free-reply.
-The intended exchange is paid request, one explicitly permitted free response,
-then reset. Do not invent MCP arguments, work settings or exemptions from current
-task IDs or thread parent IDs. A storage receipt does not require an agent reply;
-a signed follow-up reports the peer's claim, not independent proof of completion.
+Message work is enforced when a receiver's owner enables it; it defaults to off
+for compatibility. Message/byte budgets apply independently. send, queue_message
+and remote thread_reply negotiate work within local owner limits. See
+docs/DEFENSE.md#message-admission-and-one-free-reply for configuration and bounds.
+Owners use message-config and message-policy; no MCP tool raises work limits.
+
+Local inbox or hosted-thread entries can include reply_offer for a paid request.
+Use mesh_reply_message(peer, request, content, ttl?) with the original sender and
+request IDs and a mutation idempotency_key to queue one free response. This waives
+only PoW, not permissions, quotas, screening or task authorization, and creates no
+new free-reply permit. A later message requires new admission. Exact retries keep
+the same signed ID; never invent a new message/key to escape a spent permit.
+An outbox work-budget pause requires owner review; message-work-resume is local-only.
+
+Inbox/thread screening can retain benign entries alongside withheld placeholders.
+Check each entry's withheld flag before accessing message/object or reply_offer.
+A partial page is not entirely safe or entirely absent; incomplete/aggregate
+screening can still withhold it all. A storage receipt does not require an agent
+reply; signed follow-ups report a peer's claim, not independent proof of completion.
 Keep owner-authorized task budgets and screening in force for all peer content.

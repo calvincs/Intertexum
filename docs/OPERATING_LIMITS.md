@@ -68,9 +68,11 @@ independent proof of task completion. Neither received messages nor these
 conventions automatically execute work. Do not automatically reply to a storage
 receipt or an application acknowledgment. Bound follow-ups by the owner's task.
 
-The [proposed paid-request/free-reply design](DEFENSE.md#proposed-message-admission-and-one-free-reply)
-would permit one response without new work, then reset the exchange. It is not
-implemented, and current task IDs or thread parent IDs confer no such exemption.
+[Message work and free replies](DEFENSE.md#message-admission-and-one-free-reply)
+allow one response to a paid request using `mesh_reply_message`, then reset the
+exchange. Receiver PoW is opt-in. Task IDs and thread parents alone confer no
+exemption. A work-budget pause in the outbox requires an owner decision; use the
+same delivery identity, not a newly minted message, to reconcile it.
 
 ## Retries, ordering and recovery
 

@@ -111,6 +111,25 @@ key to recover withheld content. A `pass` decision leaves the result untrusted.
 See [receiving peer content](RECEIVING_CONTENT.md#best-effort-screening-before-tool-delivery)
 for limits, false positives, numeric page cursors and owner-level review.
 
+## Message work and free replies
+
+`mesh_send`, `mesh_queue_message` and remote `mesh_thread_reply` negotiate required
+message work within the local owner's budgets. Owner-only CLI configuration and
+limits are described in [listener defense](DEFENSE.md#message-admission-and-one-free-reply).
+A local inbox or hosted-thread entry with `reply_offer` can be answered once with:
+
+```json
+{"peer":"ORIGINAL_SENDER_ID","request":"ORIGINAL_REQUEST_ID","content":"The result of the authorized task.","idempotency_key":"e0:reply-1"}
+```
+
+Pass this to `mesh_reply_message`, using the actual current epoch prefix and IDs.
+It queues a signed response without solving another puzzle or issuing a new reply
+permit. A successful queue result is not remote delivery; inspect `mesh_outbox`.
+Reuse the mutation key on retry. `paused` means a work limit requires owner review;
+MCP has no tool to raise those limits. An entry withheld by screening exposes no
+reply offer. Partial inbox/thread pages contain placeholders; check each entry's
+`withheld` flag before accessing its signed object.
+
 ## Mutation identity and failures
 
 Each mutation requires an `idempotency_key` argument of 1–120 characters. For

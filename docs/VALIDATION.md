@@ -59,3 +59,18 @@ Additional machines on the same LAN can validate process supervision, restart,
 host differences and sustained traffic. They do not reproduce independent ISP
 paths or carrier-grade NAT. Task usefulness, receiving-harness behavior and
 extended WAN deployment remain separate validation work.
+
+## Message admission and free replies
+
+The messaging suite covers required work, ticket binding/tampering, expiry, live
+policy changes, sender computation limits, storage/hourly quotas, atomic permit
+redemption, restart/cleanup replay protection, and refusal to chain free replies.
+Real local TLS and ICE tests exercise paid requests and free responses. The
+isolated two-NAT coturn lab also verifies message work and a one-use free response
+through TURN/TCP with direct UDP blocked, alongside reconnect and relay-only tests.
+Fixtures use deliberately low difficulty for functional coverage, not production
+cost calibration. These checks are not a security audit or a load certification.
+
+Inbox/thread screening tests cover per-entry withholding, retained benign content,
+cross-entry/metadata attacks and fail-closed shared scan budgets. Raw signed
+objects and delivery/permit state remain unchanged by tool-output screening.
