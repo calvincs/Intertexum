@@ -290,6 +290,12 @@ request IDs and a mutation idempotency_key to queue one free response. This waiv
 only PoW, not permissions, quotas, screening or task authorization, and creates no
 new free-reply permit. A later message requires new admission. Exact retries keep
 the same signed ID; never invent a new message/key to escape a spent permit.
+If the free permit expired or is unavailable, explicitly set paid_fallback=true
+on mesh_reply_message to queue a normal-admission response within owner work
+limits. The original request must still be local and match the peer; its ID is
+included in the signed response text. Valid permits still get the free path.
+Previously attempted replies with uncertain delivery require recipient inspection
+before queueing a new message; do not infer non-delivery from a lost receipt.
 An outbox work-budget pause requires owner review; message-work-resume is local-only.
 
 Inbox/thread screening can retain benign entries alongside withheld placeholders.

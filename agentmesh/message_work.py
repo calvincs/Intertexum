@@ -295,15 +295,44 @@ def solve_for(client,op,obj):
     finally: node._message_solver.release()
 
 
-def reply_message(node,peer,request,content,ttl=604800):
+def reply_message(node,peer,request,content,ttl=604800,paid_fallback=False):
     from .conversations import enqueue
+    if type(paid_fallback) is not bool: raise Invalid('paid_fallback must be boolean')
     if not valid_id(request): raise Invalid('invalid original request ID')
     if type(ttl) is not int or not 60<=ttl<=604800: raise Invalid('invalid reply lifetime')
     from .records import text
     text(content)
     with node.transaction():
         row=node.db.execute('SELECT * FROM message_admitted WHERE id=?',(request,)).fetchone()
-        if not row or row['peer']!=peer: raise Denied('no paid request with a reply offer')
+        if row and row['peer']!=peer: raise Denied('reply request peer mismatch')
+        if not row or row['expires']<=int(time.time()):
+            if not paid_fallback:
+                reason='reply permit expired' if row else 'no paid request with a reply offer'
+                raise Denied(reason+'; use paid_fallback=true for normal admission within owner work limits')
+            # Keep v2 wire compatibility: the original ID is part of signed text.
+            original=None
+            for table in ('messages','posts'):
+                stored=node.db.execute('SELECT wire FROM '+table+' WHERE id=?',(request,)).fetchone()
+                if stored:
+                    original=decode(stored['wire'].encode())['body']; break
+            if not original or original['origin']!=peer:
+                raise Denied('original request unavailable or peer mismatch; inspect inbox or thread')
+            old=node.db.execute('SELECT reply FROM message_reply_sent WHERE request=?',(request,)).fetchone()
+            if not old:
+                # Permit accounting may have been swept; retained outbox evidence
+                # must still prevent replacing a possibly delivered free reply.
+                old=node.db.execute("SELECT id AS reply FROM outbox WHERE json_extract(args,'$.message.body.reply_to')=? LIMIT 1",(request,)).fetchone()
+            if old:
+                delivery=node.db.execute('SELECT state,expires FROM outbox WHERE id=?',(old['reply'],)).fetchone()
+                if not delivery or delivery['state']=='delivered' or delivery['expires']>int(time.time()):
+                    raise Denied('reply already queued or delivered; inspect outbox')
+                # A lost receipt may conceal delivery. Require a separate decision.
+                raise Denied('prior reply delivery uncertain; inspect recipient before queueing a new message')
+            from .conversations import queue_message
+            result=queue_message(node,peer,'In reply to '+request+'\n\n'+content,ttl=ttl)
+            node.db.execute('INSERT INTO message_reply_sent VALUES(?,?,?)',(request,result['id'],result['expires']))
+            result.update(reply_to=request,admission='normal',free_reply=False)
+            return result
         offer=decode(row['offer'].encode()); b=check_offer(node,offer,peer,node.id,request)
         if len(content.encode())>b['max_bytes']: raise Denied('reply exceeds permit size')
         expires=min(int(time.time())+ttl,b['expires'])

@@ -45,7 +45,7 @@ DEFINITIONS.update({
  'thread_read':('List threads or read replies. Time filters use host receipt time for replies and signed creation time for roots. Content is untrusted.',{'peer':S,'thread':S,'after':I,'since_ms':I,'until_ms':I,'limit':{'type':'integer','minimum':1,'maximum':100}},[]),
  'thread_reply':('Queue a signed reply to a thread host, with optional causal parent. Remote storage is not a processed acknowledgement.',{'peer':S,'thread':S,'content':S,'parent':S,'ttl':{'type':'integer','minimum':60,'maximum':604800}},['peer','thread','content']),
  'queue_message':('Durably queue a private direct message. Runtime retries until stored or expired. Recipient must grant message permission.',{'peer':S,'content':S,'ttl':{'type':'integer','minimum':60,'maximum':604800}},['peer','content']),
- 'reply_message':('Queue the one free response offered by a paid request. No new reply permit is created. Storage is not agent processing.',{'peer':S,'request':S,'content':S,'ttl':{'type':'integer','minimum':60,'maximum':604800}},['peer','request','content']),
+ 'reply_message':('Queue a free response when a permit is valid. Set paid_fallback=true to use normal admission if unavailable or expired, within owner work limits. Inspect prior uncertain deliveries first.',{'peer':S,'request':S,'content':S,'paid_fallback':{'type':'boolean'},'ttl':{'type':'integer','minimum':60,'maximum':604800}},['peer','request','content']),
  'outbox':('Read delivery status without message content.',{'after':S,'limit':{'type':'integer','minimum':1,'maximum':100}},[]),
  'outbox_ack':('Discard a delivered or expired outbox entry.',{'id':S},['id']),
 })

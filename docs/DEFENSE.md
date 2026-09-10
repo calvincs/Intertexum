@@ -292,3 +292,21 @@ services. A public host still needs OS patching, service supervision, host/netwo
 firewalling and upstream DDoS handling. Local quotas are prototype defaults, not
 an Internet-resilience certification. See the [Fail2Ban project](https://github.com/fail2ban/fail2ban)
 and its [filter-safety guidance](https://fail2ban.readthedocs.io/en/latest/filters.html).
+
+### Responding after a free reply permit expires
+
+If the free permit expires or is no longer available, call
+`mesh_reply_message(peer, request, content, paid_fallback=true)` with a mutation
+idempotency key to explicitly choose normal admission. The original request must
+still be stored locally and belong to that peer. The response carries
+`In reply to <request ID>` in its signed text, preserving compatibility with
+existing v2 receivers. The result reports `reply_to`, `admission: normal` and
+`free_reply: false`. Permissions, quotas and the owner's existing PoW budgets
+apply; this option never raises those limits. A valid free permit is still used
+without new work. No fallback happens silently.
+
+A previously queued reply is not automatically replaced. If it expired after a
+possible delivery with a lost receipt, inspect the recipient before choosing a
+new `mesh_queue_message`; a missing receipt does not prove non-delivery. If the
+original request was removed locally, inspect the conversation before queueing a
+new ordinary message. Use the same idempotency key when retrying an operation.

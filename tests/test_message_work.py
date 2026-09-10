@@ -278,3 +278,54 @@ def test_expired_unsent_offer_renews_one_slot_preserving_charge(mesh,monkeypatch
     with pytest.raises(Denied):a.receive_message(old_reply,b.id)
     reply=w.reply_message(b,a.id,obj['id'],'fresh')
     a.receive_message(queued_object(b,reply['id']),b.id)
+
+
+def test_expired_reply_explicit_paid_fallback(mesh, monkeypatch):
+    a,b,_=mesh
+    w.configure(a,{'bits':4,'reply_seconds':60})
+    w.configure(b,{'bits':4})
+    obj,proof=prepared(a,b);b.receive_message(obj,a.id,proof)
+    future=proof['offer']['body']['expires']+1
+    monkeypatch.setattr(time,'time',lambda:future)
+    assert w.reply_info(b,obj['id']) is None
+    with pytest.raises(Denied,match='reply permit expired.*paid_fallback'):
+        w.reply_message(b,a.id,obj['id'],'late answer')
+    result=w.reply_message(b,a.id,obj['id'],'late answer',paid_fallback=True)
+    response=queued_object(b,result['id'])
+    assert result['admission']=='normal' and result['reply_to']==obj['id']
+    assert response['body']['version']==2 and obj['id'] in response['body']['text']
+    with pytest.raises(Denied,match=w.REQUIRED):a.receive_message(response,b.id)
+    assert LocalClient(b,a).request('message',message=response)=={'id':result['id']}
+    with pytest.raises(Denied,match='already queued'):
+        w.reply_message(b,a.id,obj['id'],'duplicate',paid_fallback=True)
+
+
+def test_swept_reply_fallback_budget_and_peer(mesh,monkeypatch):
+    a,b,d=mesh
+    w.configure(a,{'bits':4,'reply_seconds':60})
+    w.configure(b,{'bits':4,'max_solve_bits':0})
+    # Prepare with A's solver; B's limit applies only to the return message.
+    obj,proof=prepared(a,b);b.receive_message(obj,a.id,proof)
+    future=proof['offer']['body']['expires']+1
+    monkeypatch.setattr(time,'time',lambda:future)
+    w.sweep(b)
+    with pytest.raises(Denied,match='peer mismatch'):
+        w.reply_message(b,d.id,obj['id'],'wrong peer',paid_fallback=True)
+    result=w.reply_message(b,a.id,obj['id'],'late answer',paid_fallback=True)
+    with pytest.raises(w.WorkBudget):
+        LocalClient(b,a).request('message',message=queued_object(b,result['id']))
+    assert not a.inbox()
+
+
+def test_fallback_preserves_free_path_and_rejects_uncertain_resend(mesh,monkeypatch):
+    a,b,_=mesh
+    w.configure(a,{'bits':4,'reply_seconds':60});w.configure(b,{'bits':4})
+    obj,proof=prepared(a,b);b.receive_message(obj,a.id,proof)
+    result=w.reply_message(b,a.id,obj['id'],'answer',paid_fallback=True)
+    assert queued_object(b,result['id'])['body']['version']==3
+    future=proof['offer']['body']['expires']+1
+    monkeypatch.setattr(time,'time',lambda:future)
+    w.sweep(b)
+    with pytest.raises(Denied,match='delivery uncertain'):
+        w.reply_message(b,a.id,obj['id'],'answer',paid_fallback=True)
+    assert b.db.execute('SELECT count(*) FROM outbox').fetchone()[0]==1
