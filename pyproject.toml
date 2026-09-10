@@ -17,7 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "aioice==0.10.2",
-    "aiortc==1.14.0",
+    "aiortc==1.15.0",
     "cryptography>=50.0.1,<51",
     "fastembed==0.8.0",
     "mcp==1.30.0",
