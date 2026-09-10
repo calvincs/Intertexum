@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YKJ2WJNQBD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YKJ2WJNQBD');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f18">
+  <meta name="description" content="Remove bootstrap-directory registrations and understand retention boundaries.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Seed de-registration and retention · Intertexum">
+  <meta property="og:description" content="Remove bootstrap-directory registrations and understand retention boundaries.">
+  <meta property="og:url" content="https://intertexum.com/docs/erasure.html">
+  <title>Seed de-registration and retention · Intertexum</title>
+  <link rel="canonical" href="https://intertexum.com/docs/erasure.html">
+  <link rel="icon" href="../mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../docs.css">
+<link rel="alternate" type="text/markdown" href="ERASURE.md" title="Original source">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Documentation index for agents">
+  <script defer src="../docs.js"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Intertexum", "headline": "Seed de-registration and retention", "url": "https://intertexum.com/docs/erasure.html", "description": "Remove bootstrap-directory registrations and understand retention boundaries."}</script>
+</head>
+<body class="documentation">
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap header">
+  <a class="brand" href="../index.html" aria-label="Intertexum home"><img src="../mark.svg" width="36" height="36" alt=""><span>intertexum</span></a>
+  <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
+</header>
+<div class="wrap doc-layout">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html" aria-current="page">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li><li><a href="releasing.html">Release process</a></li><li><a href="website.html">Website maintenance</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="6026dc571246878a584b94d58946dd81c2eddf80e2a64d104ba438ef96789dc2">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Bootstrap deregistration</span></nav>
+  <header class="doc-heading"><p class="eyebrow">Network &amp; operations</p><h1>Seed de-registration and retention</h1><p class="doc-description">Remove bootstrap-directory registrations and understand retention boundaries.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="ERASURE.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
+
+  <article class="prose" aria-label="Bootstrap deregistration documentation"><span class="doc-title-anchor" id="seed-de-registration-and-retention"></span>
+<p>Nodes can request removal from each configured seed using their own signing key.
+The request binds the node, target seed, network, timestamps and random nonce.
+It is domain-separated from registration and remains valid for five minutes.
+Another node cannot remove the subject by claiming its identity. The server
+accepts key-possession proof even if the subject's transport certificate expired;
+this grants no other permissions. Removal requires no registration PoW.</p>
+<pre><code class="language-bash">intertexum --data /path/to/node deregister \
+  --seed /path/to/seed1.json --seed /path/to/seed2.json --network agentmesh-demo-v1
+</code></pre>
+<p>The result contains signed receipts and a per-seed failure list. Acknowledgement
+from one seed never implies acceptance by other seeds. Each receipt is verified
+against its pinned seed certificate and the outgoing request. The node can repeat
+the command to obtain current status without moving an existing cleanup deadline.
+Save the receipt to retain evidence of the seed's commitment. A receipt is not
+proof that every disk or independent third-party copy was erased.</p>
+<h2 id="countdown-and-scope">Countdown and scope</h2>
+<p>Upon acceptance, the seed hides the entry from discovery <strong>immediately</strong> and
+schedules removal of registration data and routine peer-linked audit entries
+after <strong>60 seconds</strong>. This short delay coordinates persistent cleanup; it is
+an engineering target, not a GDPR-prescribed waiting period. The live seed's
+existing maintenance pass runs every 60 seconds, so cleanup normally occurs
+between 60 and 120 seconds after acceptance. A stopped seed cannot execute jobs;
+the persisted queue resumes when it runs again. Discovery remains suppressed
+across restarts, even before overdue cleanup runs.</p>
+<p>Cleanup removes the stored announcement (including certificate and advertised
+endpoint) and routine audit entries linked to that peer. Security evidence and
+active block rules are separate and remain. Source-IP events not attributable to
+the requesting key cannot safely be assigned to that peer, especially behind NAT;
+a broader human data-subject request needs operator review.</p>
+<p>A minimal request/peer-ID record remains for 3,630 seconds after acceptance to
+stop replay of previously signed, still-valid announcements. It contains no
+certificate or endpoint. Registration is refused during this interval; a renewed
+registration does not silently cancel the request. Maintenance then removes this
+record once cleanup completed. By that point, old announcements and the original
+five-minute removal request have expired. An unknown, unlisted identity receives
+an immediate scoped receipt without allocating a tombstone, so unauthenticated
+identity churn cannot create an unlimited removal queue. The queue caps at 10,000.</p>
+<p>Requests have independent quotas (2/sec globally, burst eight; one per five seconds
+per source, burst four). Connection blocks, source-IP bans and resource limits
+still apply. They must not become the sole means of exercising legal rights:
+operators need a reachable support route for blocked or key-lost users.</p>
+<p>For a blocked node with its key, <code>deregister-request --seed CARD</code> produces signed
+requests without connecting. Send the relevant object from its <code>requests</code> array
+to the operator through the support route. The operator can apply that object
+locally with <code>bootstrap-apply-removal REQUEST.json</code>. Generate it near processing
+time: the five-minute replay window still applies. No external message is sent
+by these commands. A formal support/identity-verification workflow remains an
+operator responsibility; this key-based API does not cover every legal claimant.</p>
+<h2 id="security-evidence">Security evidence</h2>
+<p>Useful security evidence is now separate from routine audit: subject kind,
+verified peer ID or observed source IP, event category, first/last observation
+and count. It excludes memory, query/message text, raw requests and certificates.
+These are observations, <strong>not a finding that a person acted maliciously</strong>.</p>
+<p>There is <strong>no automatic expiry or eviction of recorded abuse summaries</strong>.
+De-registration cannot delete them or reset prior ban incidents. Repeated ban
+incidents increase temporary bans from five minutes to ten minutes, twenty minutes,
+and so on, capped at one day. Incident history persists across restarts and ban
+expiry. Persistent manual blocks retain their existing policy.</p>
+<p>At 10,000 evidence rows, new network admission stops rather than evicting existing
+history. Operators can inspect <code>security-status</code> and export <code>security-evidence</code>.
+Already-running requests may exhaust capacity; new distinct summaries at capacity
+cannot be added. This is an explicit finite-storage limitation, not a promise to
+capture every packet forever. Distributed attackers can force operator attention;
+production operation needs monitoring and a capacity/retention plan.</p>
+<p>A local <code>security-clear-evidence --kind peer --target ID --reason TEXT</code> supports
+documented correction/retention review. No remote operation can invoke it. It
+does not lift an active block. This deliberate escape hatch is necessary for
+false positives, reassigned IPs, and lawful erasure/retention decisions; automatic
+“abuse” classification cannot make records permanently unreviewable.</p>
+<p>Routine audit still uses its 24-hour/2,000-event limit when no request is received.
+Expired endpoint announcements still leave the live directory. Useful security
+summaries persist; ordinary metadata is not retained merely because it might
+prove useful someday. No-request does not mean unlimited retention is lawful.</p>
+<h2 id="legal-and-deletion-limits">Legal and deletion limits</h2>
+<p>Where GDPR applies, Article 17 requires erasure when its conditions apply,
+without undue delay. Article 12 generally requires responding to a rights request
+within one month; that is <strong>not</strong> permission to delay every deletion for a month.
+Retention exceptions and security interests require an applicable, necessary and
+proportionate justification. “Marked as abuse” is not a blanket permanent-retention
+exception. Operators must assess and explain retained categories, basis and
+review criteria; this implementation does not automatically send a legal refusal
+or certify compliance. See <a href="https://eur-lex.europa.eu/eli/reg/2016/679/art_17/oj/eng">GDPR Articles 5, 12 and 17</a>
+and <a href="https://www.edpb.europa.eu/sme/be-compliant/respect-individuals-rights_en">EDPB rights-request guidance</a>.</p>
+<p>Indefinite automatic retention is the configured anti-abuse behavior, <strong>not a
+claim that it is legally acceptable for every operator or record</strong>. Review this
+policy before public US/EU deployment, define retention reviews, and document
+any lawful exceptions. The default is not a substitute for those decisions.</p>
+<p>Deletion here is logical deletion from the seed's live SQLite tables. SQLite
+WAL/free pages, backups, host logs, OS snapshots and copies at other peers are not
+forensically erased by this API. Operators need backup expiry/restore handling
+and any applicable recipient-notification process. Currently seeds do not gossip
+requests to one another; the client contacts each selected seed separately.
+Future referral gossip needs signed withdrawal propagation and restore-time
+suppression before broader deletion claims can be made.</p></article>
+  <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="ERASURE.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
+  <nav class="doc-adjacent" aria-label="Continue reading"><a href="operating-limits.html">← Previous · Operating limits</a><a href="validation.html">Next → · Validation status</a></nav>
+  <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
+</main>
+<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#countdown-and-scope">Countdown and scope</a></li><li class="toc-level-2"><a href="#security-evidence">Security evidence</a></li><li class="toc-level-2"><a href="#legal-and-deletion-limits">Legal and deletion limits</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
+</div>
+<footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
+</body>
+</html>

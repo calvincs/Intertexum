@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YKJ2WJNQBD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YKJ2WJNQBD');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f18">
+  <meta name="description" content="Where data travels, what peers can observe and what withdrawal cannot recall.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Bootstrap metadata: privacy and legal considerations · Intertexum">
+  <meta property="og:description" content="Where data travels, what peers can observe and what withdrawal cannot recall.">
+  <meta property="og:url" content="https://intertexum.com/docs/privacy.html">
+  <title>Bootstrap metadata: privacy and legal considerations · Intertexum</title>
+  <link rel="canonical" href="https://intertexum.com/docs/privacy.html">
+  <link rel="icon" href="../mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../docs.css">
+<link rel="alternate" type="text/markdown" href="PRIVACY.md" title="Original source">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Documentation index for agents">
+  <script defer src="../docs.js"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Intertexum", "headline": "Bootstrap metadata: privacy and legal considerations", "url": "https://intertexum.com/docs/privacy.html", "description": "Where data travels, what peers can observe and what withdrawal cannot recall."}</script>
+</head>
+<body class="documentation">
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap header">
+  <a class="brand" href="../index.html" aria-label="Intertexum home"><img src="../mark.svg" width="36" height="36" alt=""><span>intertexum</span></a>
+  <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
+</header>
+<div class="wrap doc-layout">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html" aria-current="page">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li><li><a href="releasing.html">Release process</a></li><li><a href="website.html">Website maintenance</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="7630a9afdcd136038ea211598b9c1e1bfb0a0f8bf579ed6470cddab462ad17e1">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Privacy &amp; data flows</span></nav>
+  <header class="doc-heading"><p class="eyebrow">Reference &amp; safety</p><h1>Bootstrap metadata: privacy and legal considerations</h1><p class="doc-description">Where data travels, what peers can observe and what withdrawal cannot recall.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="PRIVACY.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
+
+  <article class="prose" aria-label="Privacy &amp; data flows documentation"><span class="doc-title-anchor" id="bootstrap-metadata-privacy-and-legal-considerations"></span>
+<p>Implementation update: signed de-registration with immediate discovery removal,
+a cleanup countdown, and separately retained security summaries is documented in
+<a href="erasure.html">ERASURE.md</a>. The key-based API covers seed registration; broader
+rights requests, retention decisions and backup/recipient handling still require
+an operator process.</p>
+<p>Sharing only discovery metadata reduces content exposure, but does not make the
+service anonymous or automatically low-risk legally. Operators and users may be in different jurisdictions. This is a planning
+baseline, not a legal conclusion for a particular deployment.</p>
+<p>The seed shares a signed node ID, certificate, advertised IP/port, network name
+and announcement timestamps. Stable IDs permit correlation; residential IPs can
+reveal a household's network and approximate location. Security auditing also
+processes observed source IPs. We do not share queries, memory content, vectors,
+private keys or ban lists through discovery. Searches do not traverse seeds.</p>
+<p><strong>EU:</strong> IP addresses and other online identifiers may be personal data. A
+pseudonymous key hash does not necessarily anonymize an identifiable operator.
+The GDPR requires an applicable lawful basis, transparency, purpose limitation,
+data minimisation, proportionate retention/security and applicable rights.
+Registration is a deliberate product action, but is not by itself proof of valid
+GDPR consent. If legitimate interests is the basis, necessity and balancing must
+be assessed. A seed operator may have controller responsibilities for the
+processing it determines; decentralization does not automatically remove them.
+See the <a href="https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/application-gdpr_en">European Commission on GDPR scope and personal data</a>,
+<a href="https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/legal-grounds-processing-data_en">processing grounds</a>
+and <a href="https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/principles-gdpr_en">data-protection principles</a>.</p>
+<p>A US operator can fall within GDPR scope when offering services (including free
+services) to individuals in the EU or monitoring their behaviour there. Mere
+worldwide technical accessibility is not itself the complete targeting test.
+EU-established operators may have their own obligations. Assess each operator's
+actual role and whether purposes/means are jointly determined; do not assume
+every participant controls the entire mesh. Exchanges of covered personal data
+from the EEA to US recipients also need a transfer assessment. Sources:
+<a href="https://commission.europa.eu/law/law-topic/data-protection/data-protection-explained_en">EU territorial scope</a>,
+<a href="https://www.edpb.europa.eu/sites/default/files/files/file1/edpb_guidelines_3_2018_territorial_scope_after_public_consultation_en_1.pdf">EDPB targeting guidance</a>,
+<a href="https://commission.europa.eu/law/law-topic/data-protection/international-dimension-data-protection/rules-international-data-transfers_en">international transfers</a>.</p>
+<p><strong>US:</strong> applicable state privacy laws and business/scope thresholds matter. IP
+addresses and other identifiers can be personal information; a metadata-only
+service is not categorically exempt. An ordinary discovery disclosure is not
+automatically a statutory sale or advertising-related “sharing”; the actual
+arrangement and definitions matter. Privacy disclosures and promises must match
+actual practice. See <a href="https://oag.ca.gov/privacy/ccpa">California's CCPA overview</a>
+and <a href="https://oag.ca.gov/privacy/facts/online-privacy/privacy-policy">privacy-policy guidance</a>.
+This is not a complete survey of state, telecom, transfer or intermediary rules.</p>
+<p>Before public operation, identify the operator, hosting/user locations and data
+recipients; document the lawful purpose/basis; provide a clear notice before
+advertising; and establish contact, access/removal and incident processes. Get
+deployment-specific legal review once those facts are known. Collecting less
+data helps but cannot establish that a deployment complies with all applicable
+law or qualifies for a particular intermediary protection.</p>
+<p>Current engineering measures: managed runtimes advertise after onboarding with
+a network profile and owner network authorization; manual enrollment also supports
+an explicit <code>join</code> action. IPv4 mDNS advertising and browsing default to enabled
+for managed listeners on local interfaces, with identity, address, network and
+short-lived signed membership metadata visible to nearby devices. Owner policy
+<code>mdns:false</code>, network suspension and relay-only mode suppress mDNS. LAN
+announcements expire after 120 seconds and renew while the runtime is active.
+Seed announcements expire after 15 minutes by default. Active seed maintenance deletes expired directory entries
+at least once per minute. Operators can forget entries and block re-registration
+under the same ID. Audit is limited to 2,000 events/24 hours, excludes content and
+queries, and remains local. Manual blocks persist until removed or their chosen
+expiry; that separate retention purpose must be disclosed and reviewed.</p>
+<p>Limits: signed seed deregistration and its cleanup countdown are implemented,
+but there is no general automated subject-rights workflow or published deployment
+operator privacy notice. Local deletion does not erase third-party copies, WAL or backups.
+Running a private demonstration with controlled participants reduces exposure;
+opening a publicly enumerable directory to residential machines changes the
+assessment. Relays or otherwise limiting residential address exposure should be
+considered before that deployment, without pretending they remove all metadata.</p>
+<p>Public search/fetch results may be temporarily re-served by other nodes under
+their cache policies. Relay-contribution observations (record ID, provider ID,
+expiry) remain local for up to 24 hours and affect only local peer selection.
+See <a href="caching.html">CACHING.md</a>; these records are separate from security evidence.</p></article>
+  <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="PRIVACY.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
+  <nav class="doc-adjacent" aria-label="Continue reading"><a href="receiving-content.html">← Previous · Receiving peer content</a><a href="roadmap.html">Next → · Project direction</a></nav>
+  <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
+</main>
+
+</div>
+<footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
+</body>
+</html>

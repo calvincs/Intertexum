@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YKJ2WJNQBD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YKJ2WJNQBD');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f18">
+  <meta name="description" content="Signed peer referrals and the limits of distributed discovery.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Sharing a known network view · Intertexum">
+  <meta property="og:description" content="Signed peer referrals and the limits of distributed discovery.">
+  <meta property="og:url" content="https://intertexum.com/docs/peer-views.html">
+  <title>Sharing a known network view · Intertexum</title>
+  <link rel="canonical" href="https://intertexum.com/docs/peer-views.html">
+  <link rel="icon" href="../mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../docs.css">
+<link rel="alternate" type="text/markdown" href="PEER_VIEWS.md" title="Original source">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Documentation index for agents">
+  <script defer src="../docs.js"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Intertexum", "headline": "Sharing a known network view", "url": "https://intertexum.com/docs/peer-views.html", "description": "Signed peer referrals and the limits of distributed discovery."}</script>
+</head>
+<body class="documentation">
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap header">
+  <a class="brand" href="../index.html" aria-label="Intertexum home"><img src="../mark.svg" width="36" height="36" alt=""><span>intertexum</span></a>
+  <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
+</header>
+<div class="wrap doc-layout">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html" aria-current="page">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li><li><a href="releasing.html">Release process</a></li><li><a href="website.html">Website maintenance</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="6dacb515276f802f008cf43d765d935377dd16452789656fa5bbb9258311d78b">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Peer views</span></nav>
+  <header class="doc-heading"><p class="eyebrow">Memory &amp; collaboration</p><h1>Sharing a known network view</h1><p class="doc-description">Signed peer referrals and the limits of distributed discovery.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="PEER_VIEWS.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
+
+  <article class="prose" aria-label="Peer views documentation"><span class="doc-title-anchor" id="sharing-a-known-network-view"></span>
+<p>Implemented in 0.2.0. Ordinary peers exchange bounded pages of current signed
+endpoint announcements through authenticated peer connections. Search traffic
+continues directly to data peers; seeds provide initial discovery and rendezvous.</p>
+<p>The runtime samples at most three known peers every 30 seconds, independently of
+its connectivity maintenance loop. Each page contains at most 20 announcements.
+Origin signatures, network, certificate identity, expiry and monotonic timestamps
+are checked. Relays cannot extend an announcement's expiry or modify its endpoint.
+Local peer blocks remain authoritative. Certificate renewal can replace the pinned
+certificate only under the same signing identity and a fresh signed announcement.</p>
+<p>Open profiles grant public-only rights to discovered identities. They cap new
+referrals at eight per supplier and 128 total, preserving discovery space for seeds
+within the overall 1,000-peer budget. Profiles with globally addressed seeds reject
+non-global public endpoints; local demos permit private/loopback endpoints. Private
+invitation profiles still require their membership proof before enrolling referrals.</p>
+<p>The exchanged view includes endpoint/identity metadata, not private ACLs, membership
+lists for conversations, search queries, messages, content-holder relationships,
+ban lists, or trust scores. Announcements are redistributed within their network.
+They describe a partial candidate set, not a global graph or verified reachability.
+A malicious supplier can omit honest peers; signatures do not prove uniqueness or
+honesty. Independent seeds remain necessary to reduce dependence on one neighbour.</p>
+<p>Seed outages do not expire known open peers' public access. Existing direct paths
+can work without seeds. Fresh NAT rendezvous may still require a reachable seed;
+there is no arbitrary multi-hop signaling/relay overlay or global DHT. Refer to
+<a href="open-mesh.html">OPEN_MESH.md</a> for grants, federation, budgets and deployment limits.</p></article>
+  <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="PEER_VIEWS.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
+  <nav class="doc-adjacent" aria-label="Continue reading"><a href="embeddings.html">← Previous · Search &amp; embeddings</a><a href="connectivity.html">Next → · Connectivity</a></nav>
+  <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
+</main>
+
+</div>
+<footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YKJ2WJNQBD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YKJ2WJNQBD');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f18">
+  <meta name="description" content="Local defense controls, admission limits and bounded resource use.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Listener defense and search saturation · Intertexum">
+  <meta property="og:description" content="Local defense controls, admission limits and bounded resource use.">
+  <meta property="og:url" content="https://intertexum.com/docs/defense.html">
+  <title>Listener defense and search saturation · Intertexum</title>
+  <link rel="canonical" href="https://intertexum.com/docs/defense.html">
+  <link rel="icon" href="../mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../docs.css">
+<link rel="alternate" type="text/markdown" href="DEFENSE.md" title="Original source">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Documentation index for agents">
+  <script defer src="../docs.js"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Intertexum", "headline": "Listener defense and search saturation", "url": "https://intertexum.com/docs/defense.html", "description": "Local defense controls, admission limits and bounded resource use."}</script>
+</head>
+<body class="documentation">
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap header">
+  <a class="brand" href="../index.html" aria-label="Intertexum home"><img src="../mark.svg" width="36" height="36" alt=""><span>intertexum</span></a>
+  <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
+</header>
+<div class="wrap doc-layout">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html" aria-current="page">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li><li><a href="releasing.html">Release process</a></li><li><a href="website.html">Website maintenance</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="f11b236b9be38351430d1f81a2534f3ff91e691bd9e530aa613b805cf4e8f1fd">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Defenses &amp; rate limits</span></nav>
+  <header class="doc-heading"><p class="eyebrow">Network &amp; operations</p><h1>Listener defense and search saturation</h1><p class="doc-description">Local defense controls, admission limits and bounded resource use.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="DEFENSE.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
+
+  <article class="prose" aria-label="Defenses &amp; rate limits documentation"><span class="doc-title-anchor" id="listener-defense-and-search-saturation"></span>
+<p>Retention update: <a href="erasure.html">ERASURE.md</a> adds signed seed de-registration and
+segregated persistent security summaries. Routine audit still expires; security
+summaries do not automatically expire. Repeat ban incidents now escalate up to a
+one-day temporary ban. A documented local retention-review path remains available.</p>
+<p>Bootstrap discovery introduces peers. Searches go directly to a chosen <strong>data
+peer</strong>. The bootstrap protocol accepts registration, discovery, removal and bounded
+signaling operations; it neither receives nor forwards searches. One host may run both
+listeners as separate roles. Federated search caps fan-out at eight peers and four concurrent requests.</p>
+<h2 id="shared-baseline">Shared baseline</h2>
+<p>Both listener roles use <code>agentmesh.defense.Defense</code>: local persistent peer-ID and
+IP/CIDR blocks, bounded rate accounting, automatic 300-second bans, and a bounded
+local audit database. Rules are read from SQLite on requests, so local CLI edits
+take effect without restarting either listener. Blocks are not broadcast; an
+untrusted accusation cannot create a network-wide ban.</p>
+<p>Before TLS, source-IP blocks and connection quotas apply. Source means the
+accepted socket address, never an announcement's advertised IP or a request
+header. There are 16 concurrent connection handlers, existing handshake/frame
+deadlines, and a global connection bucket of 20/sec for data and 40/sec for
+bootstrap, with burst 40 per role.
+Data listeners allow 4 connections/sec per source, burst 20; bootstrap listeners
+allow 10/sec, burst 16, for aggregate shared-NAT traffic. Data request frames now cap at 128 KiB; responses remain
+bounded by the existing 2 MiB protocol maximum. Bootstrap requests cap at 16 KiB.</p>
+<p>An authenticated data request also checks the peer-ID block. Eight attributable
+failures within a 60-second window trigger a five-minute ban. Examples include
+invalid requests and exceeding that client's own allowance. Authenticated abuse
+is attributed to the verified peer ID; pre-authentication failures are attributed
+to the observed source IP. Global capacity rejection and a busy search worker do
+not count as client abuse. No ban is created from an unverified claimed peer ID.</p>
+<p>IP quotas necessarily share capacity behind NAT. Data-listener pre-TLS abuse can still cause
+a shared-IP ban; separating authenticated identities does not solve that earlier
+stage. Bootstrap quota congestion instead returns backpressure without counting
+normal shared-NAT overload as abuse. Verified signaling identities have their own
+2/sec, burst-eight budget and attributable repeated abuse can still trigger a
+peer ban. Signaling also has global 10/sec and shared-IP 8/sec budgets. Structured
+seed rate-limit replies include retry_after seconds for bounded client backoff.
+There are no automatic subnet bans. Operators may explicitly block CIDRs.
+At most 1,000 live block rules, 4,096 quota entries and 4,096 failure counters are
+held. Expired bans are removed during checks and maintenance. Quotas/counters
+are per process and reset at restart; active bans and manual rules persist.</p>
+<h2 id="search-specific-defense">Search-specific defense</h2>
+<p>Search uses separate buckets: 2 requests/sec per verified peer (burst 8),
+4/sec per source IP (burst 16), and 4/sec globally (burst 16). It also has one
+nonblocking concurrent-search slot per node process. Excess callers receive a
+denial before entering search, rather than forming a search queue. Other RPCs
+use separate request buckets (10/sec per peer, burst 30; global 20/sec, burst 40).</p>
+<p>Each admitted search token includes 50 ms of thread CPU time. More expensive
+searches debit additional tokens from peer/IP/global search budgets after
+completion, capped at 20 extra tokens. This prevents a client from sustaining
+expensive searches merely by staying below a requests-per-second threshold.
+The search CPU charge includes failed searches and does not require proof of
+work. Clients must back off after denial; the CLI does not automatically retry.</p>
+<p>Remote searches have a cooperative 500 ms wall-clock evaluation budget. Checks
+occur during provenance traversal and scoring. Exhaustion returns a denial,
+never an apparently complete empty or partial result. This is not hard CPU
+preemption: an individual signature check, regex operation, sort, SQLite wait or
+Python scheduling can overrun a checkpoint. Local operator search is exempt.
+An incremental lexical/vector index bounds full provenance verification to 256
+candidates; candidate_limited coverage exposes that retrieval limit. The immutable
+wire verification cache never caches grants or other access decisions.
+The existing node lock still serializes database operations, so an in-flight
+search can delay other data work until it finishes or reaches its budget.
+Production scale needs worker isolation/indexes and measured fairness under load.</p>
+<h2 id="registration-costs">Registration costs</h2>
+<p>Private demo mode retains zero-bit work unless configured. Public-address mode
+now defaults to <strong>18 bits</strong>, requires at least 16, and retains the client's
+20-bit/two-second maximum. This is an admission friction policy, not a promise
+that every weak CPU completes a puzzle. Test weaker devices before deployment.</p>
+<p>Challenge and registration have distinct source-IP buckets: each allows one
+request per ten seconds with burst four. Each has a global bucket of one/sec,
+burst eight. Successful cryptographic verification also precedes an identity
+quota of one registration per minute, burst two. Every renewal consumes a new
+work ticket. Changing peer IDs does not reset the source-IP budgets. Existing
+work binding, expiry and atomic replay-consumption rules remain in force.</p>
+<p>Blocked peer IDs and advertised IP ranges are refused at registration and
+filtered from discovery responses. Advertised addresses are used for filtering,
+never for automatic punishment. The directory still caps at 1,000 entries; work
+and quotas do not prove Sybil resistance or prevent a distributed attacker from
+occupying the directory. Admission reservations/eviction and load tests remain
+future work. Bootstrap discovery responses are separately limited to 2/sec per
+source, burst 10, and 5/sec globally, burst 20. A rapid full-directory enumeration
+may be denied; no completeness claim is made.</p>
+<h2 id="operator-controls-and-audit">Operator controls and audit</h2>
+<pre><code class="language-bash">intertexum --data /path/to/node security-block --peer PEER_ID
+intertexum --data /path/to/node security-block --cidr 203.0.113.0/24 --seconds 3600
+intertexum --data /path/to/node security-status
+intertexum --data /path/to/node security-audit
+intertexum --data /path/to/node security-unblock --cidr 203.0.113.0/24
+intertexum --data /path/to/node security-unblock --peer PEER_ID
+intertexum --data /path/to/node bootstrap-forget PEER_ID
+</code></pre>
+<p>These commands are local-only. <code>security-block</code> denies direct activity and
+referrals; use the existing <code>block PEER_ID</code> command as well when withdrawing
+origin trust for previously cached memory and its descendants. <code>bootstrap-forget</code>
+removes the current directory entry; block that peer too to prevent registration
+again under that identity. Neither operation erases copies already obtained by
+other nodes, and key rotation creates a different identity.</p>
+<p>The audit stores timestamp, event category, observed source address when relevant,
+verified peer ID when available and a short controlled detail. It excludes search
+terms, vectors, memories, message bodies and raw requests. Only the first failure
+in a window and subsequent ban are recorded, plus registration/admin events.
+The database retains at most 2,000 events and 24 hours; the CLI displays the newest
+200. Live listeners purge expired audit/bans every minute. Live seeds also purge
+expired announcements/tickets every minute, even without registration traffic.
+Logical SQL deletion does not guarantee forensic erasure from WAL or backups.</p>
+<p>Application bans are built in and require no root access. Optional host Fail2Ban
+examples are under <code>ops/fail2ban/</code>. They match a fixed stderr line emitted only
+after the application bans an <strong>observed source IP</strong>. Advertised addresses,
+exception strings and peer-supplied content never become the ban target. The
+example jail is disabled by default; review service name, ports, administrator
+access and your host firewall before enabling it. We did not install Fail2Ban
+or change host firewall rules. The external integration template has not been
+validated against an installed Fail2Ban daemon here.</p>
+<p>Application defense cannot stop link saturation or protect SSH and other host
+services. A public host still needs OS patching, service supervision, host/network
+firewalling and upstream DDoS handling. Local quotas are prototype defaults, not
+an Internet-resilience certification. See the <a href="https://github.com/fail2ban/fail2ban">Fail2Ban project</a>
+and its <a href="https://fail2ban.readthedocs.io/en/latest/filters.html">filter-safety guidance</a>.</p></article>
+  <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="DEFENSE.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
+  <nav class="doc-adjacent" aria-label="Continue reading"><a href="bootstrap.html">← Previous · Bootstrap profiles</a><a href="operating-limits.html">Next → · Operating limits</a></nav>
+  <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
+</main>
+<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#shared-baseline">Shared baseline</a></li><li class="toc-level-2"><a href="#search-specific-defense">Search-specific defense</a></li><li class="toc-level-2"><a href="#registration-costs">Registration costs</a></li><li class="toc-level-2"><a href="#operator-controls-and-audit">Operator controls and audit</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
+</div>
+<footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
+</body>
+</html>

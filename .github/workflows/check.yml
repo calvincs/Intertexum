@@ -7,6 +7,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - run: python3 -m pip install -r docs-requirements.txt
+      - run: python3 -m unittest -v test_doc_render
+      - run: python3 build_docs.py --check
+      - run: node --check docs.js
       - run: node --check sky.js
       - run: node --check how-it-works.js
       - run: python3 check_site.py

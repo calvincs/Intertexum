@@ -1,5 +1,11 @@
 # NAT and connectivity
 
+A **bootstrap node** introduces peers and exchanges signed connection setup
+signals. It is called a **seed** in configuration (`seeds`) and CLI options
+(`--seed`). A TURN relay has a different job: forwarding encrypted peer traffic.
+See the [glossary](GLOSSARY.md#network-connections) for ICE, STUN, NAT and the other
+connection terms used here.
+
 Nodes now have an optional background ICE transport using pinned aiortc 1.15.0
 and aioice 0.10.2. Existing direct mutual-TLS connections continue to work.
 When TCP cannot connect, the client refreshes its approved peer's signed endpoint,
@@ -16,7 +22,7 @@ members enroll automatically within the owner-provisioned permission ceiling.
 
 ## Configure a node
 
-Run your bootstrap listener as described in `BOOTSTRAP.md`. Obtain its public
+Run your bootstrap-node listener as described in [BOOTSTRAP.md](BOOTSTRAP.md). Obtain its public
 card through an authenticated channel. Place the actual card object in `seeds`
 in a JSON file like this (the placeholder is intentionally not a usable card):
 

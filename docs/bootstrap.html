@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YKJ2WJNQBD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YKJ2WJNQBD');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f18">
+  <meta name="description" content="Configure bootstrap nodes (called seeds) and trusted discovery profiles.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Bootstrap, public joining, and admission work · Intertexum">
+  <meta property="og:description" content="Configure bootstrap nodes (called seeds) and trusted discovery profiles.">
+  <meta property="og:url" content="https://intertexum.com/docs/bootstrap.html">
+  <title>Bootstrap, public joining, and admission work · Intertexum</title>
+  <link rel="canonical" href="https://intertexum.com/docs/bootstrap.html">
+  <link rel="icon" href="../mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../docs.css">
+<link rel="alternate" type="text/markdown" href="BOOTSTRAP.md" title="Original source">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Documentation index for agents">
+  <script defer src="../docs.js"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Intertexum", "headline": "Bootstrap, public joining, and admission work", "url": "https://intertexum.com/docs/bootstrap.html", "description": "Configure bootstrap nodes (called seeds) and trusted discovery profiles."}</script>
+</head>
+<body class="documentation">
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap header">
+  <a class="brand" href="../index.html" aria-label="Intertexum home"><img src="../mark.svg" width="36" height="36" alt=""><span>intertexum</span></a>
+  <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
+</header>
+<div class="wrap doc-layout">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html" aria-current="page">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li><li><a href="releasing.html">Release process</a></li><li><a href="website.html">Website maintenance</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="9e564217709bf19adb291d5d245417d3d9cfa9edd0976381e235cf58c97f2e98">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Bootstrap profiles</span></nav>
+  <header class="doc-heading"><p class="eyebrow">Network &amp; operations</p><h1>Bootstrap, public joining, and admission work</h1><p class="doc-description">Configure bootstrap nodes (called seeds) and trusted discovery profiles.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="BOOTSTRAP.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
+
+  <article class="prose" aria-label="Bootstrap profiles documentation"><span class="doc-title-anchor" id="bootstrap-public-joining-and-admission-work"></span>
+<p>A <strong>bootstrap node</strong> helps other nodes find peers and exchange signed connection
+setup signals. The configuration name is <strong>seed</strong>: <code>seeds</code> holds bootstrap-node
+cards and each <code>--seed</code> option supplies one card on the CLI. It does not carry memory or messages
+or grant private access. See the <a href="glossary.html#bootstrap-node">glossary</a> for this
+and related terms.</p>
+<p>Updated defense policy: see <a href="defense.html">DEFENSE.md</a> for shared blocks, audit,
+temporary bans, search protection and tighter registration quotas. Public-address
+mode now defaults to 18-bit work (minimum 16); private-demo default stays zero.
+Searches are sent directly to data peers, never through the bootstrap protocol.
+The newer defense policy supersedes the original rate/default discussion below.
+See <a href="privacy.html">PRIVACY.md</a> for metadata disclosure considerations.</p>
+<p>There are two separate listeners. The data listener uses pinned mutual TLS and
+local read/publish/message permissions. The bootstrap listener accepts unknown
+registrants over server-authenticated TLS, stores self-signed endpoint
+announcements, and returns candidate peers. Registering is open; data permissions
+remain explicit. A successful puzzle grants no data permission or endorsement.</p>
+<h2 id="demonstration">Demonstration</h2>
+<pre><code class="language-bash">.venv/bin/python -m examples.bootstrap_mesh
+</code></pre>
+<p>This starts two independent bootstrap processes and two data-node processes.
+Alice advertises through both seeds. The first seed stops. New node Bob uses the
+actual <code>join</code> CLI to fall through the unavailable seed, register with the second,
+and discover Alice. Both trust stores remain empty. After explicit local
+approval, Bob sends Alice a signed message over mutual TLS. Temporary directories
+and processes are cleaned up. The demo uses 12-bit work to exercise admission;
+ordinary messages carry no work requirement.</p>
+<h2 id="run-a-seed">Run a seed</h2>
+<pre><code class="language-bash">.venv/bin/intertexum --data /tmp/seed1 init
+.venv/bin/intertexum --data /tmp/seed1 card --host 127.0.0.1 --port 7444 &gt; /tmp/seed1-card.json
+.venv/bin/intertexum --data /tmp/seed1 bootstrap-serve --port 7444 --network agentmesh-demo-v1
+</code></pre>
+<p>Create another seed with another directory and port. Distribute seed cards
+through a trusted channel; the exact TLS certificate is pinned. Any node can
+host this separate service; seeds do not have memory-access privileges.</p>
+<pre><code class="language-bash">.venv/bin/intertexum --data /tmp/alice init
+.venv/bin/intertexum --data /tmp/alice join \
+  --seed /tmp/seed1-card.json --seed /tmp/seed2-card.json \
+  --host 127.0.0.1 --port 7443 --network agentmesh-demo-v1
+.venv/bin/intertexum --data /tmp/alice discover \
+  --seed /tmp/seed1-card.json --seed /tmp/seed2-card.json
+</code></pre>
+<p><code>join</code> advertises and discovers; it does not start the data listener. Run <code>serve</code>
+separately. Review returned signed candidates, save a candidate's <code>body.card</code>,
+then use <code>trust CARD --allow ...</code> on the appropriate nodes. Output lists failed
+seeds and never claims complete global discovery. Existing data connections do
+not require an available seed.</p>
+<p>For a reachable hosted seed, bind <code>bootstrap-serve --host 0.0.0.0</code>, advertise its
+real numeric public IP in the seed card, choose an explicit network name, and
+use <code>--public-addresses</code> to reject non-global advertised peer addresses. This
+implementation's listener is IPv4; it does not yet offer IPv6 listening or DNS
+endpoint resolution. A public seed is hostable, but no host has been deployed.</p>
+<h2 id="bounds-and-proof-of-work">Bounds and proof of work</h2>
+<p>Private demo default: <code>--pow-bits 0</code> (no search effort). Optional registration
+friction: <code>--pow-bits 16</code>. The server issues a 120-second HMAC-authenticated
+challenge bound to server identity, network, <code>register</code> action, peer identity,
+and signed announcement hash. The client finds a SHA-256 nonce. Verification
+checks the MAC, binding, expiry, difficulty, and hash; registration consumes the
+challenge atomically with the directory update. Reuse fails. A restart rotates
+the challenge key and invalidates outstanding challenges. New announcements and
+renewals each require a new ticket; normal search, messaging, and cache fetches
+do not. A client refuses more than 20 bits or more than two seconds of work.</p>
+<p>This is not a coin, consensus protocol, trust score, or proof of personhood.
+GPU/ASIC users and botnets can buy disproportionately cheap hashes. A fixed
+hash difficulty does not promise a fixed delay, especially on weaker CPUs.
+Renewal work is opt-in with the seed's difficulty; use zero for the private demo.
+Before enabling it publicly, measure p95 solve time on the slowest supported
+device and keep work out of emergency revocation and established-peer traffic.</p>
+<p>Local calibration on the benchmark machine, single Python solver:</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Documentation table"><table>
+<thead>
+<tr>
+<th>Difficulty</th>
+<th style="text-align: right;">Trials</th>
+<th style="text-align: right;">Solve p50</th>
+<th style="text-align: right;">Solve p95</th>
+<th style="text-align: right;">Verify p50</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>12 bits</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">3.7 ms</td>
+<td style="text-align: right;">11.5 ms</td>
+<td style="text-align: right;">.018 ms</td>
+</tr>
+<tr>
+<td>16 bits</td>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">23.3 ms</td>
+<td style="text-align: right;">114.2 ms</td>
+<td style="text-align: right;">.061 ms</td>
+</tr>
+<tr>
+<td>18 bits</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">108.2 ms</td>
+<td style="text-align: right;">592.7 ms</td>
+<td style="text-align: right;">.068 ms</td>
+</tr>
+</tbody>
+</table></div>
+<p>No trial hit the two-second client budget. These are random-work samples, not
+guarantees; the 16-bit maximum was 298.6 ms. Verification timing covers the work
+ticket, not TLS, signature checks, or SQLite writes. See
+<code>benchmarks/results/work.json</code> (generated locally by <code>python -m benchmarks.work</code>). Start the private demo with
+work disabled; 16 bits is a candidate for a measured public admission experiment.</p>
+<p>The seed also caps concurrent handlers at 16, requests at 16 KiB, announcements
+at 8 KiB, directory entries at 1,000, replay tickets at 10,000, and discovery pages
+at 50 entries. Connections are limited before TLS to a global bucket (20/sec,
+burst 40) and per-source-IP bucket (2/sec, burst 10); the IP map is capped at
+4,096 entries and expires idle buckets after 60 seconds. These limits share
+capacity across clients behind a NAT. Handshake and frame deadlines are five
+seconds each. This is a bounded prototype, not volumetric DDoS protection.</p>
+<h2 id="what-public-networking-still-needs">What public networking still needs</h2>
+<p>An unknown node can register with a reachable seed and discover the network
+today. It cannot automatically read, publish, or message arbitrary nodes. The
+next policy decision is whether public peers get narrowly scoped public-read
+access, introductions/invitations, or some other admission mechanism. Private
+content must remain protected in all cases. Solved work must never be that
+authorization mechanism.</p>
+<p>Announcements expire after 15 minutes by default, with a maximum one-hour
+lifetime. Registration checks signatures, certificate validity, network name,
+and timestamps; a live directory rejects backwards timestamp updates and
+conflicting announcements in the same second. It does not persist a per-peer
+sequence watermark after expiry, so old still-valid announcements can be replayed
+to a fresh directory. Entries are unverified reachability claims. Optional reachability probes dial only the caller socket IP and its registered
+unprivileged port. Configured clients refresh peers and renew registrations. Open profiles admit
+new identities for public access only; private invitation profiles require their
+membership proof. Ordinary peer exchange is implemented. Seed-to-seed gossip
+and fully seedless initial discovery are not implemented. A malicious seed can omit peers; several operator-independent
+seeds reduce dependence but do not prove completeness or eclipse resistance.</p>
+<p>Consumer machines behind NAT can enable <a href="connectivity.html">signed rendezvous, ICE hole punching
+and authenticated relay fallback</a>. Bootstrap alone does not make an inbound port
+reachable. We also still need hosted-process supervision, key renewal/recovery,
+monitoring, and abuse/load testing before calling this a production public mesh.</p>
+<p>Sources: <a href="https://libp2p.io/docs/dht/">libp2p discovery/DHT</a>,
+<a href="https://libp2p.io/docs/dos-mitigation/">connection and resource limits</a>, and
+<a href="https://docs.libp2p.io/concepts/hole-punching/">NAT hole punching</a>.</p></article>
+  <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="BOOTSTRAP.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
+  <nav class="doc-adjacent" aria-label="Continue reading"><a href="connectivity.html">← Previous · Connectivity</a><a href="defense.html">Next → · Defenses &amp; rate limits</a></nav>
+  <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
+</main>
+<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#demonstration">Demonstration</a></li><li class="toc-level-2"><a href="#run-a-seed">Run a seed</a></li><li class="toc-level-2"><a href="#bounds-and-proof-of-work">Bounds and proof of work</a></li><li class="toc-level-2"><a href="#what-public-networking-still-needs">What public networking still needs</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
+</div>
+<footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
+</body>
+</html>

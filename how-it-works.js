@@ -86,13 +86,13 @@
       diagram.dataset.mode = value;
       if (kind === 'discovery') {
         const lan = value === 'lan';
-        set('[data-discovery-label]', lan ? 'IPv4 mDNS · local introductions' : 'Operator-provisioned seeds · discovery + signaling');
-        set('[data-discovery-description]', lan ? 'Running nodes with the same network name announce themselves on the LAN.' : 'Pinned seeds forward signed announcements and help peers arrange a connection.');
-        set('[data-discovery-foot]', lan ? 'No external seed is required for this LAN example.' : 'Seeds introduce peers. Application traffic uses peer connections or an encrypted relay path.');
+        set('[data-discovery-label]', lan ? 'Local discovery · IPv4 mDNS' : 'Bootstrap nodes · introductions');
+        set('[data-discovery-description]', lan ? 'Running nodes with the same network name announce themselves on the LAN.' : 'Trusted bootstrap nodes forward signed introductions and help peers arrange a connection.');
+        set('[data-discovery-foot]', lan ? 'No bootstrap node is required for this local network example.' : 'Bootstrap nodes introduce peers. Messages and memory use peer connections or an encrypted relay path.');
       } else if (kind === 'membership') {
         const open = value === 'public';
         set('[data-member-title]', open ? 'Discovered identity' : 'Prove membership');
-        set('[data-member-description]', open ? 'Public access only' : 'HMAC-SHA256 proof on a signed announcement');
+        set('[data-member-description]', open ? 'Public access only' : 'Proof of the shared invitation');
         set('[data-member-proof]', open ? 'No shared membership secret' : 'Invitation secret is never broadcast');
         const permission = document.querySelector('[data-private-permission]');
         permission.replaceChildren();
@@ -110,7 +110,7 @@
         const direct = value === 'direct';
         set('[data-transport-label]', direct ? 'Mutual TLS 1.3' : 'Encrypted DTLS traffic');
         diagram.querySelector('.relay-chip').hidden = direct;
-        set('[data-transport-foot]', direct ? 'Direct TCP uses pinned mutual TLS. ICE can establish a direct DTLS data channel when needed.' : 'A configured authenticated TURN relay forwards ciphertext. It is separate from a discovery seed.');
+        set('[data-transport-foot]', direct ? 'Each side verifies the other’s identity; TLS encrypts the direct connection. ICE can arrange another encrypted direct path when needed.' : 'A configured relay server (TURN) forwards encrypted traffic. Bootstrap nodes handle introductions separately.');
       }
       status.textContent = `${names[current]}: ${button.textContent}. Illustration updated.`;
     });

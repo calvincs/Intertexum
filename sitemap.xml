@@ -1,2 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://intertexum.com/</loc></url><url><loc>https://intertexum.com/how-it-works.html</loc></url></urlset>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://intertexum.com/</loc></url>
+  <url><loc>https://intertexum.com/how-it-works.html</loc></url>
+  <url><loc>https://intertexum.com/docs/understanding.html</loc></url>
+  <url><loc>https://intertexum.com/docs/agent-setup.html</loc></url>
+  <url><loc>https://intertexum.com/docs/glossary.html</loc></url>
+  <url><loc>https://intertexum.com/docs/mcp.html</loc></url>
+  <url><loc>https://intertexum.com/docs/open-mesh.html</loc></url>
+  <url><loc>https://intertexum.com/docs/caching.html</loc></url>
+  <url><loc>https://intertexum.com/docs/embeddings.html</loc></url>
+  <url><loc>https://intertexum.com/docs/peer-views.html</loc></url>
+  <url><loc>https://intertexum.com/docs/connectivity.html</loc></url>
+  <url><loc>https://intertexum.com/docs/bootstrap.html</loc></url>
+  <url><loc>https://intertexum.com/docs/defense.html</loc></url>
+  <url><loc>https://intertexum.com/docs/operating-limits.html</loc></url>
+  <url><loc>https://intertexum.com/docs/erasure.html</loc></url>
+  <url><loc>https://intertexum.com/docs/validation.html</loc></url>
+  <url><loc>https://intertexum.com/docs/spec.html</loc></url>
+  <url><loc>https://intertexum.com/docs/receiving-content.html</loc></url>
+  <url><loc>https://intertexum.com/docs/privacy.html</loc></url>
+  <url><loc>https://intertexum.com/docs/roadmap.html</loc></url>
+  <url><loc>https://intertexum.com/docs/releasing.html</loc></url>
+  <url><loc>https://intertexum.com/docs/website.html</loc></url>
+  <url><loc>https://intertexum.com/security.html</loc></url>
+  <url><loc>https://intertexum.com/disclaimer.html</loc></url>
+  <url><loc>https://intertexum.com/license.html</loc></url>
+  <url><loc>https://intertexum.com/notice.html</loc></url>
+  <url><loc>https://intertexum.com/docs/index.html</loc></url>
+</urlset>

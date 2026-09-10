@@ -59,5 +59,7 @@
     "reward": "bounded local peer-selection preference; no currency or extra permissions"
   },
   "visual_guide": "how-it-works.html",
-  "system_guide": "docs/UNDERSTANDING.md"
+  "system_guide": "docs/UNDERSTANDING.md",
+  "documentation": "docs/index.html",
+  "documentation_sources": "docs/index.md"
 }

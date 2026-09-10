@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YKJ2WJNQBD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YKJ2WJNQBD');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f18">
+  <meta name="description" content="The bundled embedding model, retrieval behavior and offline runtime.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="CPU embedding decision — 2026-09-09 · Intertexum">
+  <meta property="og:description" content="The bundled embedding model, retrieval behavior and offline runtime.">
+  <meta property="og:url" content="https://intertexum.com/docs/embeddings.html">
+  <title>CPU embedding decision — 2026-09-09 · Intertexum</title>
+  <link rel="canonical" href="https://intertexum.com/docs/embeddings.html">
+  <link rel="icon" href="../mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../docs.css">
+<link rel="alternate" type="text/markdown" href="EMBEDDINGS.md" title="Original source">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Documentation index for agents">
+  <script defer src="../docs.js"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Intertexum", "headline": "CPU embedding decision — 2026-09-09", "url": "https://intertexum.com/docs/embeddings.html", "description": "The bundled embedding model, retrieval behavior and offline runtime."}</script>
+</head>
+<body class="documentation">
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap header">
+  <a class="brand" href="../index.html" aria-label="Intertexum home"><img src="../mark.svg" width="36" height="36" alt=""><span>intertexum</span></a>
+  <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
+</header>
+<div class="wrap doc-layout">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html" aria-current="page">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li><li><a href="releasing.html">Release process</a></li><li><a href="website.html">Website maintenance</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="0b7a27868ac72e1ed0a5406b4b360e80fd0211503b0ae0ea043d8e53c514ead2">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Search &amp; embeddings</span></nav>
+  <header class="doc-heading"><p class="eyebrow">Memory &amp; collaboration</p><h1>CPU embedding decision — 2026-09-09</h1><p class="doc-description">The bundled embedding model, retrieval behavior and offline runtime.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="EMBEDDINGS.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
+
+  <article class="prose" aria-label="Search &amp; embeddings documentation"><span class="doc-title-anchor" id="cpu-embedding-decision--2026-09-09"></span>
+<p>Ship <strong>sentence-transformers/all-MiniLM-L6-v2</strong>, using the pinned Qdrant ONNX
+conversion. The package includes its files and Apache-2.0 license. It works
+without an account, API key, GPU, or inference-time download. New nodes select
+this profile by default. This is an English short-memory baseline, not a claim
+about multilingual retrieval, source-code search, or all CPU architectures.</p>
+<h2 id="measured-comparison">Measured comparison</h2>
+<p>AMD Ryzen Threadripper PRO 3955WX, Linux x86_64, Python 3.13.11. ONNX CPU provider,
+two inference threads, document batches of 16, fresh processes. No GPU was used.
+Two threads constrain parallelism; they do not simulate an old laptop or ARM
+board. Query latency uses 96 warmed single-query calls. Model-session loading
+excludes imports and downloads and uses files already in the OS cache.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Documentation table"><table>
+<thead>
+<tr>
+<th>Measurement</th>
+<th style="text-align: right;">MiniLM, selected</th>
+<th style="text-align: right;">BGE-small, Qdrant quantized</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Model artifacts including tokenizer</td>
+<td style="text-align: right;">87.10 MiB</td>
+<td style="text-align: right;">64.29 MiB</td>
+</tr>
+<tr>
+<td>Query latency p50</td>
+<td style="text-align: right;">22.7 ms</td>
+<td style="text-align: right;">50.9 ms</td>
+</tr>
+<tr>
+<td>Query latency p95</td>
+<td style="text-align: right;">23.9 ms</td>
+<td style="text-align: right;">55.2 ms</td>
+</tr>
+<tr>
+<td>First session construction</td>
+<td style="text-align: right;">0.178 s</td>
+<td style="text-align: right;">0.157 s</td>
+</tr>
+<tr>
+<td>Short-memory documents/sec</td>
+<td style="text-align: right;">55.2</td>
+<td style="text-align: right;">24.5</td>
+</tr>
+<tr>
+<td>SciFact documents/sec</td>
+<td style="text-align: right;">55.0</td>
+<td style="text-align: right;">incomplete</td>
+</tr>
+<tr>
+<td>Full-corpus process memory</td>
+<td style="text-align: right;">384.0 MiB peak</td>
+<td style="text-align: right;">stopped at observed 800.4 MiB</td>
+</tr>
+<tr>
+<td>Effective tokenizer limit</td>
+<td style="text-align: right;">128 tokens</td>
+<td style="text-align: right;">512 tokens</td>
+</tr>
+</tbody>
+</table></div>
+<p>The <a href="https://github.com/calvincs/Intertexum/blob/main/benchmarks/PLAN.md">selection plan</a> preceded evaluation. It set a 150 MiB
+artifact budget and 750 MiB peak benchmark-process memory budget. BGE crossed
+the memory budget during SciFact, so its large-corpus run was stopped. The
+<code>benchmarks/results/bge-small-resource-limit.json</code> (generated locally)
+records that termination. A separate completed memory-only BGE run supplies
+its latency and memory-fixture metrics. Its memory-only process peaked at
+244.9 MiB; <strong>that is not comparable to MiniLM's full-corpus peak</strong>.</p>
+<p>This eliminates that BGE configuration under this declared batch/context budget;
+it does not establish that BGE cannot run on CPU. Smaller batches or shorter
+contexts could lower memory use and merit a future separately declared run.
+There is no BGE SciFact quality score because its corpus encoding did not finish.
+MiniLM is the sole eligible completed candidate, so the weighted-quality tie
+rule is not used to claim a head-to-head quality win.</p>
+<h2 id="retrieval-results">Retrieval results</h2>
+<p>The frozen memory fixture has 64 original hand-authored snippets, 32 queries,
+and one relevant snippet per query. It includes confusable distractors and
+paraphrases. It is a small synthetic regression set, not an independent estimate
+of real-user accuracy. SciFact is the full BEIR test split: 5,183 scientific
+abstracts and 300 judged queries. It is external data, but its domain differs
+from agent memory and model training overlap is possible.</p>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Documentation table"><table>
+<thead>
+<tr>
+<th>Dataset / retrieval</th>
+<th style="text-align: right;">Recall@5</th>
+<th style="text-align: right;">Recall@10</th>
+<th style="text-align: right;">MRR@10</th>
+<th style="text-align: right;">nDCG@10</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Memory / MiniLM semantic</td>
+<td style="text-align: right;">1.000</td>
+<td style="text-align: right;">1.000</td>
+<td style="text-align: right;">.889</td>
+<td style="text-align: right;">.917</td>
+</tr>
+<tr>
+<td>Memory / BGE semantic</td>
+<td style="text-align: right;">.969</td>
+<td style="text-align: right;">1.000</td>
+<td style="text-align: right;">.879</td>
+<td style="text-align: right;">.910</td>
+</tr>
+<tr>
+<td>Memory / BM25</td>
+<td style="text-align: right;">.688</td>
+<td style="text-align: right;">.781</td>
+<td style="text-align: right;">.624</td>
+<td style="text-align: right;">.661</td>
+</tr>
+<tr>
+<td>Memory / MiniLM hybrid</td>
+<td style="text-align: right;">.844</td>
+<td style="text-align: right;">.875</td>
+<td style="text-align: right;">.701</td>
+<td style="text-align: right;">.744</td>
+</tr>
+<tr>
+<td>Memory / BGE hybrid</td>
+<td style="text-align: right;">.844</td>
+<td style="text-align: right;">.875</td>
+<td style="text-align: right;">.760</td>
+<td style="text-align: right;">.789</td>
+</tr>
+<tr>
+<td>SciFact / MiniLM semantic</td>
+<td style="text-align: right;">.687</td>
+<td style="text-align: right;">.774</td>
+<td style="text-align: right;">.578</td>
+<td style="text-align: right;">.624</td>
+</tr>
+<tr>
+<td>SciFact / BM25</td>
+<td style="text-align: right;">.726</td>
+<td style="text-align: right;">.791</td>
+<td style="text-align: right;">.628</td>
+<td style="text-align: right;">.662</td>
+</tr>
+<tr>
+<td>SciFact / MiniLM hybrid</td>
+<td style="text-align: right;">.756</td>
+<td style="text-align: right;">.846</td>
+<td style="text-align: right;">.640</td>
+<td style="text-align: right;">.686</td>
+</tr>
+</tbody>
+</table></div>
+<p>Hybrid uses independent cosine and BM25 rankings with RRF constant 60, matching
+the implementation's scoring formula. Benchmark IDs break ties deterministically;
+actual signed-record IDs can order exact ties differently. <strong>Hybrid is not
+uniformly better:</strong> it helps on SciFact and hurts on the paraphrase-heavy memory
+fixture. The CLI exposes <code>--semantic-only</code> and <code>--lexical-only</code>; default text
+search retains the system's hybrid policy. Weight changes require broader real
+memory evaluation, rather than tuning against these 32 queries.</p>
+<p>The benchmark preserves each downloaded artifact's native truncation. Inspection
+found that this Qdrant MiniLM tokenizer sets <code>max_length=128</code>, despite the
+upstream model's commonly documented 256-token setting. The report uses the
+effective value, not the initial candidate metadata's 256. SciFact abstracts
+are truncated for this standard whole-document benchmark. Runtime memory
+ingestion rejects oversized input instead, so these scores do not measure a
+future chunk-and-aggregate pipeline.</p>
+<h2 id="bundling-and-operation">Bundling and operation</h2>
+<p>Model: <a href="https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2">upstream MiniLM</a>.
+Conversion: <a href="https://huggingface.co/qdrant/all-MiniLM-L6-v2-onnx/tree/5f1b8cd78bc4fb444dd171e59b18f3a3af89a079">Qdrant snapshot</a>.
+Revision: <code>5f1b8cd78bc4fb444dd171e59b18f3a3af89a079</code>.</p>
+<p>The weights are 90,387,630 bytes; all tested model/tokenizer artifacts total
+91,334,522 bytes. Licenses and the profile add a small amount. Python and ONNX
+runtime dependencies are additional disk/memory costs. The generated wheel
+includes the model, tokenizer, notices and license; it does not include the
+benchmark dataset or alternative model. Dependency installation still needs
+packages or an offline wheelhouse; offline inference alone needs no connection.</p>
+<p>The embedding namespace is a SHA-256 profile of model files, revision, pooling,
+prefixes, normalization, dimensions and runtime versions. It uses 384 dimensions,
+attention-mask mean pooling, L2 normalization, and no query/passage prefix.
+FastEmbed 0.8.0, ONNX Runtime 1.29.0, and tokenizers 0.23.2 are pinned and checked
+at load. Every listed asset is checksummed before loading. The encoder uses
+CPUExecutionProvider, two threads, batch size one, and a specific local model
+path. Runtime telemetry events are disabled before model construction.</p>
+<pre><code class="language-bash">.venv/bin/intertexum --data /tmp/notes init
+.venv/bin/intertexum --data /tmp/notes write --text 'Restore the database from backups after disk failure.'
+# Publish the returned private ID to make it eligible for shared search:
+.venv/bin/intertexum --data /tmp/notes publish PRIVATE_ID --audience '*'
+.venv/bin/intertexum --data /tmp/notes search --text 'Recover data after losing a drive'
+</code></pre>
+<p>The 128-token limit includes special tokens. Overlength input fails with a clear
+split/shorten message; <code>mesh_write_document</code> provides bounded, atomic chunking. Encoding errors
+never cause fallback to another model. Existing custom-vector nodes retain their
+configured namespace and require explicit vectors. A future model change requires
+a new namespace and re-embedding; equal dimension alone does not mean compatible
+vectors. Remote record signatures do not prove that the origin actually used
+the claimed embedding model; quarantine approval remains necessary.</p>
+<h2 id="reproduction-and-evidence">Reproduction and evidence</h2>
+<pre><code class="language-bash">uv sync --locked --extra test
+.venv/bin/python -m benchmarks.prepare
+.venv/bin/python -m benchmarks.run minilm
+.venv/bin/python -m benchmarks.run bge-small --memory-only
+.venv/bin/python -m benchmarks.work
+</code></pre>
+<p><code>prepare</code> downloads the committed revisions and verifies hashes from
+<code>benchmarks/MODEL_SOURCES.json</code>; it does not select the latest model silently.
+The exact SciFact archive SHA-256 is
+<code>536e14446a0ba56ed1398ab1055f39fe852686ecad24a6306c80c490fa8e0165</code>.
+The memory fixture SHA-256 is
+<code>4f40811ad4ab948495804f0c30ebef02121393d35ec222ee3b4a90288a240cbd</code>.</p>
+<p>Raw metrics and per-query rankings are generated under <code>benchmarks/results/</code>,
+which is excluded from Git and distribution archives. Reproduce them with the
+commands above; the measured selection summary remains in this document.</p>
+<p>The BGE full run can be repeated with <code>benchmarks.run bge-small</code>; the runner does
+not automatically stop on the memory threshold. In this session it was explicitly
+interrupted once the observed process memory exceeded the budget. It is not
+necessary to finish a disqualified configuration to reproduce the decision.</p>
+<p>Dataset sources: <a href="https://github.com/beir-cellar/beir">BEIR</a> and
+<a href="https://github.com/allenai/scifact">SciFact</a>. Test on the weakest intended
+CPU and on real, consented memory examples before promising a device-level SLO.</p></article>
+  <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="EMBEDDINGS.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
+  <nav class="doc-adjacent" aria-label="Continue reading"><a href="caching.html">← Previous · Caching &amp; participation</a><a href="peer-views.html">Next → · Peer views</a></nav>
+  <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
+</main>
+<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#measured-comparison">Measured comparison</a></li><li class="toc-level-2"><a href="#retrieval-results">Retrieval results</a></li><li class="toc-level-2"><a href="#bundling-and-operation">Bundling and operation</a></li><li class="toc-level-2"><a href="#reproduction-and-evidence">Reproduction and evidence</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
+</div>
+<footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
+</body>
+</html>

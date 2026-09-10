@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YKJ2WJNQBD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YKJ2WJNQBD');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f18">
+  <meta name="description" content="What has been tested and which deployment claims still need evidence.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Validation · Intertexum">
+  <meta property="og:description" content="What has been tested and which deployment claims still need evidence.">
+  <meta property="og:url" content="https://intertexum.com/docs/validation.html">
+  <title>Validation · Intertexum</title>
+  <link rel="canonical" href="https://intertexum.com/docs/validation.html">
+  <link rel="icon" href="../mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../docs.css">
+<link rel="alternate" type="text/markdown" href="VALIDATION.md" title="Original source">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Documentation index for agents">
+  <script defer src="../docs.js"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Intertexum", "headline": "Validation", "url": "https://intertexum.com/docs/validation.html", "description": "What has been tested and which deployment claims still need evidence."}</script>
+</head>
+<body class="documentation">
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap header">
+  <a class="brand" href="../index.html" aria-label="Intertexum home"><img src="../mark.svg" width="36" height="36" alt=""><span>intertexum</span></a>
+  <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
+</header>
+<div class="wrap doc-layout">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html" aria-current="page">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li><li><a href="releasing.html">Release process</a></li><li><a href="website.html">Website maintenance</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="e3488673e981ca06e1e4d00115b7378eb92c0198c9c1cfdd51bd57230617d44e">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Validation status</span></nav>
+  <header class="doc-heading"><p class="eyebrow">Network &amp; operations</p><h1>Validation</h1><p class="doc-description">What has been tested and which deployment claims still need evidence.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="VALIDATION.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
+
+  <article class="prose" aria-label="Validation status documentation"><span class="doc-title-anchor" id="validation"></span>
+<p>The release suite exercises memory authorization and ancestry, quarantine,
+withdrawal relay, pinned TLS, bounded listeners, proof of work, erasure,
+ICE/reconnection, onboarding, JSONL, official MCP clients, daemon crash recovery,
+public/private grants, threaded conversation access and pagination, durable
+delivery, retention, receipt reconciliation, backup/restore, certificate renewal,
+and offline document embeddings.</p>
+<p>Run from a checkout:</p>
+<pre><code class="language-sh">uv sync --locked --extra test --python 3.13
+uv run pytest -q -W error
+python3 scripts/check_release.py
+uv build
+python3 scripts/check_release.py --artifacts dist
+</code></pre>
+<p>Tests use temporary directories and loopback sockets. A sandbox must permit local
+TCP/Unix sockets for integration tests. No live public mesh is needed.</p>
+<p>The audit regressions cover owner capability enforcement through every adapter,
+private-memory search, cold search across 10,000 short records with 384-dimensional
+vectors, live authorization after cached signature verification, independent
+withdrawal budgets, long-lived origins with unrelated withdrawal history, and
+bounded authenticated peer capability responses. Delivery checks include
+same-key certificate renewal, completed-error receipts, concurrent destinations,
+per-peer ordering, and 30 queued deliveries through real TLS without self-banning.
+Connectivity checks include blocked/private ICE destinations, mapped-address and
+DNS endpoint blocks, relay-only TCP rejection, immediate shutdown, and the actual
+idle polling scheduler for 30 registered nodes using a simulated clock.</p>
+<p>Process demos separately exercise three-node memory/messaging, restart,
+withdrawal relay, and two-seed discovery with an outage. These passed alongside
+the isolated NAT lab after the audit fixes. Tests run with warnings treated as
+errors to catch background-task cleanup failures.
+Website validation is maintained separately on the gh-pages branch.
+CI reports the current count and result; historical local tool transcripts and
+machine-specific raw outputs are not distributed.</p>
+<h2 id="isolated-real-nat-lab">Isolated real-NAT lab</h2>
+<p><code>integration/nat_lab.py</code> exercises two port-preserving NAT routers with overlapping
+private subnets, inbound TCP reachability detection, ICE hole punching, incorrect
+TURN-password rejection, TURN/TCP fallback with UDP blocked, external-IP migration,
+and relay-only gathering. These checks passed in the local namespace lab.</p>
+<p>Run only inside an isolated user/network namespace as described in
+<a href="connectivity.html">CONNECTIVITY.md</a>, with a locally installed coturn binary. It must
+not modify the host's networking. Results are local artifacts and should be written
+outside the source tree or under <code>.scratch/</code>.</p>
+<p>This demonstrates the selected test topologies, not Internet-wide compatibility,
+production resilience, or a formal security audit. Hosted WAN/CGNAT and extended
+operator-pilot validation remain release-stage work.</p>
+<p>Additional machines on the same LAN can validate process supervision, restart,
+host differences and sustained traffic. They do not reproduce independent ISP
+paths or carrier-grade NAT. Task usefulness, receiving-harness behavior and
+extended WAN deployment remain separate validation work.</p></article>
+  <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="VALIDATION.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
+  <nav class="doc-adjacent" aria-label="Continue reading"><a href="erasure.html">← Previous · Bootstrap deregistration</a><a href="spec.html">Next → · Protocol specification</a></nav>
+  <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
+</main>
+<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#isolated-real-nat-lab">Isolated real-NAT lab</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
+</div>
+<footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
+</body>
+</html>

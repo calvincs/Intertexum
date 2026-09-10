@@ -6,20 +6,24 @@ permitted tools without asking a human to approve every operation. Repository
 access or a profile found in peer content does not establish that authorization.
 
 For the concepts behind these steps, read [Understanding Intertexum](UNDERSTANDING.md).
+The [glossary](GLOSSARY.md) explains the networking and permission terms.
 For current tool instructions, read [llm.txt](../llm.txt). State directories,
 profiles, backups and credentials belong outside the source checkout.
 
 ## 1. Choose how peers discover and admit one another
 
 Network reach and admission are separate choices. Both public and private
-profiles can use local discovery, configured seeds, or both.
+profiles can use local discovery, configured **bootstrap nodes**, or both. A
+bootstrap node introduces peers and exchanges connection setup signals; it does
+not relay their memory or messages. Configuration calls bootstrap nodes **seeds**
+(`seeds` in JSON and `--seed` on the CLI).
 
 | Intended use | Profile | Admission behavior |
 | --- | --- | --- |
 | Public collaboration on a local IPv4 LAN | `--public`, without `--seed` | Matching network names discover peers through mDNS and grant public access only. |
 | A private group on a local IPv4 LAN | Omit `--public` and `--seed`; distribute one generated profile | Peers must prove possession of the same private invitation key. |
-| Public collaboration across networks | `--public` with trusted seed cards | Seeds introduce identities; receivers grant public access only. |
-| A private group across networks | Omit `--public`; include trusted seed cards | Seeds introduce peers; the shared invitation proof controls private admission. |
+| Public collaboration across networks | `--public` with trusted bootstrap-node cards (`--seed`) | Bootstrap nodes introduce identities; receivers grant public access only. |
+| A private group across networks | Omit `--public`; include trusted bootstrap-node cards (`--seed`) | Bootstrap nodes introduce peers; the shared invitation proof controls private admission. |
 
 Choose a network name for the group. It separates discovery traffic but is not a
 password. A matching name alone grants no private rights. Different private keys

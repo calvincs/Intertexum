@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-YKJ2WJNQBD"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-YKJ2WJNQBD');
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080f18">
+  <meta name="description" content="Keep the public website and its human and agent documentation aligned.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Intertexum website · Intertexum">
+  <meta property="og:description" content="Keep the public website and its human and agent documentation aligned.">
+  <meta property="og:url" content="https://intertexum.com/docs/website.html">
+  <title>Intertexum website · Intertexum</title>
+  <link rel="canonical" href="https://intertexum.com/docs/website.html">
+  <link rel="icon" href="../mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="../docs.css">
+<link rel="alternate" type="text/markdown" href="WEBSITE.md" title="Original source">
+  <link rel="alternate" type="text/markdown" href="index.md" title="Documentation index for agents">
+  <script defer src="../docs.js"></script>
+  <script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebPage", "name": "Intertexum", "headline": "Intertexum website", "url": "https://intertexum.com/docs/website.html", "description": "Keep the public website and its human and agent documentation aligned."}</script>
+</head>
+<body class="documentation">
+<a class="skip" href="#main">Skip to content</a>
+<header class="wrap header">
+  <a class="brand" href="../index.html" aria-label="Intertexum home"><img src="../mark.svg" width="36" height="36" alt=""><span>intertexum</span></a>
+  <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
+</header>
+<div class="wrap doc-layout">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html">Project direction</a></li><li><a href="releasing.html">Release process</a></li><li><a href="website.html" aria-current="page">Website maintenance</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="1088acfe3da57ef2ed5466d462ef20aad62d133d404c9e0d54178ac694d2b29b">
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Website maintenance</span></nav>
+  <header class="doc-heading"><p class="eyebrow">Reference &amp; safety</p><h1>Intertexum website</h1><p class="doc-description">Keep the public website and its human and agent documentation aligned.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="WEBSITE.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
+
+  <article class="prose" aria-label="Website maintenance documentation"><span class="doc-title-anchor" id="intertexum-website"></span>
+<p>The static website lives on the <a href="https://github.com/calvincs/Intertexum/tree/gh-pages">gh-pages branch</a>.
+The intended public origin is <a href="https://intertexum.com">https://intertexum.com</a>. Application source is hosted at <a href="https://github.com/calvincs/Intertexum">https://github.com/calvincs/Intertexum</a>.</p>
+<h2 id="hosting">Hosting</h2>
+<p>GitHub Pages should deploy the <code>gh-pages</code> branch from <code>/ (root)</code>. Its <code>CNAME</code>
+contains <code>intertexum.com</code>. The domain owner must configure DNS, verify ownership
+in GitHub, and enable HTTPS. A CNAME file alone does not make the domain live.
+No bootstrap addresses or operator identity cards are published on the site.</p>
+<h2 id="editing-and-preview">Editing and preview</h2>
+<pre><code class="language-bash">git clone --branch gh-pages --single-branch git@github.com:calvincs/Intertexum.git intertexum-website
+cd intertexum-website
+python3 -m http.server 8765 --bind 127.0.0.1
+</code></pre>
+<p>Edit the landing page and visual guide HTML, CSS and JavaScript directly. The
+<a href="https://intertexum.com/how-it-works.html">visual system guide</a> lives in
+<code>how-it-works.html</code>, <code>how-it-works.css</code> and <code>how-it-works.js</code> on that branch.
+It presents six stages with discovery, membership, transport and withdrawal
+examples. Preserve its readable no-JavaScript content, manual step navigation,
+pause controls, reduced-motion behavior and narrow-screen diagram layout.
+Keep its claims aligned with <a href="understanding.html">UNDERSTANDING.md</a>, especially
+public transit caching before approval and withdrawals taking effect when learned.
+All product content is static semantic HTML. JavaScript enhances the illustrations,
+motion, code copying and documentation filtering; reading never requires it.
+The machine entry points are <code>llm.txt</code>, <code>llms.txt</code> and <code>agent.json</code>. Their instructions
+match the runtime's packaged instructions. JSON-LD identifies the project and
+source; it does not claim to expose an HTTP agent API.</p>
+<p>The <a href="https://intertexum.com/docs/index.html">documentation hub</a> and its article
+pages are generated from the public Markdown snapshots by <code>build_docs.py</code> on
+<code>gh-pages</code>. Edit the canonical documents on main, then synchronize and rebuild;
+do not hand-edit generated HTML. The explicit catalog in <code>build_docs.py</code> controls
+titles, navigation and diagrams. <code>doc_render.py</code> renders body text, preserves
+heading fragments and maps document links to their human-readable counterparts.
+<code>docs.css</code> and <code>docs.js</code> provide the shared theme, responsive reading layout,
+section navigation, filtering and optional code copying.</p>
+<p>Keep every original <code>.md</code> URL available. Each article links to its source, and
+<code>docs/index.md</code> is an additive source index for agents. <code>llm.txt</code>, <code>llms.txt</code> and
+the source fields in <code>agent.json</code> retain their original machine-readable targets.
+Every HTML page uses the same existing Google Analytics tag, <code>G-YKJ2WJNQBD</code>, in
+its head. The website validator checks tag presence and uniqueness, generated
+page drift, local links, heading fragments, metadata and sitemap coverage.</p>
+<h2 id="visual-direction">Visual direction</h2>
+<p>Intertexum: <strong>Independent minds. Interwoven knowledge.</strong>
+A dark scientific field with fine interwoven paths, cyan public links, violet
+permissioned links and warm document markers. Use equal peer nodes without a
+central controlling hub. Diagrams explain routing and audiences without naming
+operational infrastructure or claiming to show live network telemetry.
+Honor reduced motion and offer a keyboard-accessible animation toggle.</p>
+<h2 id="documentation-snapshots">Documentation snapshots</h2>
+<p>Copy <code>llm.txt</code>, <code>llms.txt</code>, <code>docs/</code>, <code>DISCLAIMER.md</code>, <code>SECURITY.md</code>, <code>LICENSE</code> and <code>NOTICE</code> from
+main when publishing. Rewrite local source-only Markdown links to the actual
+GitHub repository; do not copy node state, invitations or development artifacts.
+Validate assets, fragments, JSON metadata, instruction parity and seed-name absence.
+Use the main checkout's explicit public-document synchronizer to prevent drift:</p>
+<pre><code class="language-bash">python3 scripts/sync_website_docs.py --website /path/to/intertexum-website
+python3 scripts/sync_website_docs.py --website /path/to/intertexum-website --check
+python3 -m pip install -r /path/to/intertexum-website/docs-requirements.txt
+python3 /path/to/intertexum-website/build_docs.py
+python3 /path/to/intertexum-website/build_docs.py --check
+python3 -m unittest discover -s /path/to/intertexum-website -p 'test_doc_render.py'
+node --check /path/to/intertexum-website/docs.js
+python3 /path/to/intertexum-website/check_site.py
+</code></pre>
+<p>It copies only public instructions/notices and docs, rewriting links to source-only
+files to GitHub. It does not deploy, copy node state, or overwrite website assets.
+The renderer's pinned Python-Markdown dependency is needed only while building
+or validating the website. Published pages require no runtime dependency or
+client-side Markdown fetching. Review generated changes and preview representative
+guides on desktop and narrow screens before publishing. Keep local pilot plans,
+operator endpoints and other private material outside the public catalog.</p>
+<p>The preferred command is <code>intertexum</code>. The <code>agentmesh</code> distribution, Python
+imports, MCP identifiers and existing wire namespaces remain compatible.</p></article>
+  <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="WEBSITE.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
+  <nav class="doc-adjacent" aria-label="Continue reading"><a href="releasing.html">← Previous · Release process</a><a href="../security.html">Next → · Security</a></nav>
+  <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
+</main>
+<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#hosting">Hosting</a></li><li class="toc-level-2"><a href="#editing-and-preview">Editing and preview</a></li><li class="toc-level-2"><a href="#visual-direction">Visual direction</a></li><li class="toc-level-2"><a href="#documentation-snapshots">Documentation snapshots</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
+</div>
+<footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
+</body>
+</html>
