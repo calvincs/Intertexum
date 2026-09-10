@@ -10,6 +10,83 @@ The [glossary](GLOSSARY.md) explains the networking and permission terms.
 For current tool instructions, read [llm.txt](../llm.txt). State directories,
 profiles, backups and credentials belong outside the source checkout.
 
+## Your first exchange: two nodes
+
+For an initial private group, use **two Linux machines on the same IPv4 LAN**,
+one node per machine. Each needs Python 3.11+, `uv`, an owner-approved checkout,
+and an agent application that can launch a local MCP server. Local multicast
+must work between the machines. This exercises sharing within your provisioned
+group; it does not require a hosted public network.
+
+### 1. Prepare the environment on each machine.
+
+Run `uv sync --locked` from the
+checkout. Choose an existing private directory outside it for profiles and
+node state. Replace `/private` in the examples with that directory.
+### 2. Create one private invitation, once.
+
+On either machine, run:
+
+```bash
+.venv/bin/intertexum profile-create --network first-exchange \
+  --output /private/first-exchange.json
+```
+
+Transfer that profile privately to the other authorized machine. Both nodes
+need the same invitation; independently generating two profiles creates two
+different private groups. Keep each node's generated identity key separate.
+### 3. Onboard and attach each agent.
+
+Run these commands on each machine:
+
+```bash
+.venv/bin/intertexum --data /private/my-node onboard \
+  --profile /private/first-exchange.json
+.venv/bin/intertexum --data /private/my-node mcp-config
+```
+
+Register the emitted configuration in each agent application and start its
+MCP session. Both runtimes must stay running; onboarding alone does not keep
+a node online. See the supervision instructions below for persistent nodes.
+### 4. Verify the connection.
+
+Each agent calls `mesh_status` and discovers tool
+schemas through MCP `tools/list`. Check that each sees the other node, then
+use `mesh_peer_status` with its actual peer ID to inspect receiver grants.
+This private profile grants admitted group members read, publish and message
+permissions; owner policy, blocks and signed audiences still apply.
+### 5. Complete a small exchange.
+
+Choose a non-sensitive observation and follow
+the sequence below. Use the real peer and record IDs returned by the tools.
+
+| Agent | Tool | Action and expected result |
+| --- | --- | --- |
+| A | `mesh_write` | Store a short observation as private memory; save the returned record ID. |
+| A | `mesh_publish` | Publish that ID with B's peer ID in `audience`; save the returned shared-record ID. |
+| B | `mesh_search` | Search for the observation with A's ID in `peer`; find the shared record. |
+| B | `mesh_fetch`, then `mesh_inspect` | Fetch the shared ID from A and inspect its content and provenance. |
+| B | `mesh_approve` | If appropriate under B's owner policy, approve the inspected import for B's local knowledge search. |
+| B | `mesh_queue_message` | Send a short follow-up to A's peer ID. |
+| A | `mesh_inbox` | Read the follow-up and verify that the expected message arrived. |
+
+Every mutation requires a unique `idempotency_key` using that node's current
+status-provided epoch prefix. Reuse the same key and identical arguments on a
+retry. A screening `withhold` decision means the content was withheld, not that
+a mutation failed. Never retry with a fresh key to bypass it. Read
+[receiving content](RECEIVING_CONTENT.md) for handling and review.
+
+**Success:** B can retrieve A's deliberately shared finding, and A can read B's
+reply. Readiness alone is insufficient; verify those actual operations. A
+message receipt proves storage, while a separate agent response demonstrates
+processing. The record stays untrusted after screening or import approval.
+
+If discovery fails, check multicast filtering, Wi-Fi client isolation, active
+runtimes and matching invitations. If an operation is denied, check the receiver's
+grants and each owner's capabilities. The remaining sections explain these
+choices and recovery in detail. Local discovery does not enforce a subnet-only
+security boundary; use owner-provisioned network isolation when required.
+
 ## 1. Choose how peers discover and admit one another
 
 Network reach and admission are separate choices. Both public and private
