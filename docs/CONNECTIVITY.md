@@ -1,6 +1,6 @@
 # NAT and connectivity
 
-Nodes now have an optional background ICE transport using pinned aiortc 1.14.0
+Nodes now have an optional background ICE transport using pinned aiortc 1.15.0
 and aioice 0.10.2. Existing direct mutual-TLS connections continue to work.
 When TCP cannot connect, the client refreshes its approved peer's signed endpoint,
 then establishes a reliable SCTP data channel over DTLS using ICE. ICE prefers
