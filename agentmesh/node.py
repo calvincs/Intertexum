@@ -92,6 +92,8 @@ class Node:
         message_schema(self)
         from .cache import schema as cache_schema
         cache_schema(self)
+        from .routing import schema as routing_schema
+        routing_schema(self)
         self._migrate_retractions()
         # Rebuild once during startup, outside a remote request's time budget.
         self._refresh_search_index()
@@ -640,7 +642,7 @@ class Node:
                      "text": content, "nonce": uuid.uuid4().hex, **({"expires":expires} if expires is not None else {}),
                      **({"reply_to":reply_to,"permit":permit} if reply_to is not None else {})})
 
-    def receive_message(self, obj, requester, admission=None):
+    def receive_message(self, obj, requester, admission=None, *, _routed_work=None):
         self.capability('receive')
         with self.transaction():
             self.require(requester, "message")
@@ -664,7 +666,7 @@ class Node:
             if self.db.execute("SELECT count(*) FROM messages").fetchone()[0] >= MAX_RECORDS:
                 raise Denied("inbox quota reached")
             from .message_work import admit
-            admit(self,obj,requester,"message",admission)
+            admit(self,obj,requester,"message",admission,_routed_work=_routed_work)
             self.db.execute("INSERT OR IGNORE INTO messages VALUES(?,?)", (obj["id"], canonical(obj).decode()))
             return obj["id"]
 

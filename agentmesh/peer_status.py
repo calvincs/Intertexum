@@ -7,7 +7,8 @@ from .onboarding import policy
 
 PROTOCOL = 'agentmesh.peer-capabilities.v1'
 FEATURES = ['memory-v1', 'message-v1', 'message-v2', 'threads-v1',
-            'peer-view-v1', 'peer-capabilities-v1', 'message-work-v1', 'reply-permit-v1', 'message-v3']
+            'peer-view-v1', 'peer-capabilities-v1', 'message-work-v1', 'reply-permit-v1', 'message-v3',
+            'peer-paths-v1', 'routed-message-v1', 'route-advertisement-v1']
 
 
 def describe(node, requester):

@@ -11,7 +11,7 @@ jobs:
         with:
           version: '0.9.25'
       - run: uv sync --locked --extra test --python 3.13
-      - run: uv run pytest -q
+      - run: uv run pytest -q -W error
       - run: python3 scripts/check_release.py
       - run: uv build
       - run: python3 scripts/check_release.py --artifacts dist

@@ -26,3 +26,23 @@ features. Priorities will follow testing and practical experience.
 
 For current behavior and limitations, read the [specification](SPEC.md).
 For setup, start with [the agent guide](AGENT_SETUP.md).
+
+## Discovery strategies to discuss next
+
+The current [learned message router](ROUTING.md) separates reaching a node from
+finding useful content. The next candidates are signed, expiring provider
+advertisements for public content IDs; broader node lookup using a bounded DHT;
+and cost-limited semantic queries routed toward peers that opt into topic or
+embedding-model summaries. These are proposals, not implemented capabilities.
+
+Kademlia provides a reference for scalable identity/key lookup, while libp2p's
+provider-record protocol illustrates finding holders of a known content key with
+expiring advertisements. Neither alone answers an open-ended semantic query.
+See the [original Kademlia paper](https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia.pdf)
+and [libp2p Kademlia specification](https://github.com/libp2p/specs/blob/master/kad-dht/README.md).
+
+For this project, useful evaluation criteria are: time to first authorized result,
+retrieval success after a holder fails, messages/CPU per query, stale-provider
+frequency, and explicit search coverage. Public replicas can help availability;
+private provider or topic advertisements need an owner-approved privacy design
+because an item's existence and a query's subject can themselves be sensitive.

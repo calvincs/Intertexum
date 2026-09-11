@@ -207,3 +207,16 @@ without stopping other networking. It takes effect on the next discovery loop
 Network suspension and relay-only mode also suppress local discovery. Status
 includes `connectivity.mdns`; a running browser is not proof of remote access.
 The feature uses the [python-zeroconf async API](https://python-zeroconf.readthedocs.io/en/stable/api.html).
+
+## Accepted paths and mesh forwarding
+
+`mesh_status.transport_paths` describes local transport policy.
+`mesh_peer_status(peer).paths` reports authenticated remote path hints when supported.
+Selected ICE pairs, observed NAT candidates and `path_decisions` explain actual
+choices separately from capability claims. A structured pre-dispatch transport
+refusal lets a normal sender reach a relay-only receiver through ICE/TURN; ordinary
+authorization denials never trigger this fallback.
+
+For forwarding through other Intertexum nodes rather than a TURN service, see
+[learned mesh routing](ROUTING.md). It is owner-enabled and carries encrypted
+messages with bounded per-hop proof of work, expiring routes and recipient receipts.

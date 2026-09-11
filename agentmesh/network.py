@@ -20,6 +20,18 @@ from cryptography.hazmat.primitives import serialization
 from .crypto import Invalid, Denied, MAX_WIRE_BYTES, canonical, decode, certificate, public_id
 
 TIMEOUT = 5
+PATH_PROTOCOL = 'agentmesh.peer-paths.v1'
+
+
+def paths(node):
+    """Local transport policy, not a promise of reachability or authorization."""
+    from .connectivity import load_config
+    manager = node.connectivity
+    config = manager.config if manager else load_config(node)
+    only = bool(config and config['relay_only'])
+    return {'protocol': PATH_PROTOCOL, 'accepted': ['relay'] if only else
+            (['direct-tcp', 'direct-ice', 'relay'] if config else ['direct-tcp']),
+            'configured_ice': bool(config), 'relay_only': only}
 
 
 def relay_only(node):
@@ -140,6 +152,14 @@ def dispatch(node, peer_id, request):
     if not isinstance(request, dict) or set(request) != {"op", "args"} or not isinstance(request["args"], dict):
         raise Invalid("invalid request schema")
     op, args = request["op"], request["args"]
+    if op == 'paths' and not args:
+        return paths(node)
+    if op == 'route_exchange' and not args:
+        from .routing import exchange
+        return exchange(node, peer_id)
+    if op == 'route_accept' and set(args) == {'envelope', 'chain'}:
+        from .routing import accept
+        return accept(node, peer_id, **args)
     if op == 'message_challenge' and set(args)=={'operation','id','thread','offer'}:
         from .message_work import challenge
         return challenge(node,peer_id,**args)
@@ -180,13 +200,18 @@ class _Handler(socketserver.BaseRequestHandler):
                 peer_id = authenticate(conn, node)
                 try:
                     request = receive(conn,128*1024)
-                    if relay_only(node):
-                        raise Denied('relay-only policy requires the encrypted relay transport')
                     op = request.get('op') if isinstance(request,dict) else None
                     node.defense.operation(source,peer_id,op,'data')
-                    with node.defense.search(source,peer_id) if op=='search' else nullcontext():
-                        result = dispatch(node, peer_id, request)
-                    response = {"ok": True, "result": result}
+                    if relay_only(node) and op not in ('paths', 'capabilities'):
+                        # This refusal occurs before dispatch: retry on the indicated
+                        # transport is safe even for a non-idempotent operation.
+                        response = {'ok': False, 'error': 'transport_required',
+                                    'paths': paths(node), 'executed': False}
+                        result = None
+                    else:
+                        with node.defense.search(source,peer_id) if op=='search' else nullcontext():
+                            result = dispatch(node, peer_id, request)
+                        response = {"ok": True, "result": result}
                     if isinstance(result, dict) and "results" in result and "coverage" in result:
                         while len(canonical(response)) > MAX_WIRE_BYTES and result["results"]:
                             result["results"].pop()
@@ -256,8 +281,14 @@ class Server(socketserver.ThreadingTCPServer):
 
 
 class Client:
-    def __init__(self, node, peer_id):
+    def __init__(self, node, peer_id, *, timeout=110):
         self.node, self.peer_id = node, peer_id
+        self.timeout = timeout
+
+    def _ice_request(self, manager, op, args):
+        if self.timeout == 110:
+            return manager.request(self.peer_id, op, args)
+        return manager.request(self.peer_id, op, args, timeout=self.timeout)
 
     def _direct(self, op, args):
         self.node.capability('network')
@@ -314,9 +345,9 @@ class Client:
             if manager is None:
                 from .connectivity import load_config
                 manager = connectivity_manager(self.node, load_config(self.node))
-            return self._result(manager.request(self.peer_id, op, args))
+            return self._result(self._ice_request(manager, op, args))
         if manager and manager.state['peers'].get(self.peer_id,{}).get('path') in ('direct-ice','relay'):
-            response=manager.request(self.peer_id,op,args)
+            response=self._ice_request(manager,op,args)
             return self._result(response)
         try:
             response=self._direct(op,args)
@@ -332,7 +363,20 @@ class Client:
             except TimeoutError:future.cancel()
             try:response=self._direct(op,args)
             except Denied:raise
-            except OSError:response=manager.request(self.peer_id,op,args)
+            except OSError:response=self._ice_request(manager,op,args)
+        if (isinstance(response, dict) and response.get('error') == 'transport_required'
+                and response.get('ok') is False and response.get('executed') is False
+                and response.get('paths') == {'protocol': PATH_PROTOCOL,
+                    'accepted': ['relay'], 'configured_ice': True, 'relay_only': True}):
+            from .connectivity import load_config
+            config = load_config(self.node)
+            if config is None:
+                raise Denied('peer requires relay; configure ICE and a compatible seed/relay path')
+            manager = connectivity_manager(self.node, config)
+            manager.state.setdefault('path_decisions', {})[self.peer_id] = {
+                'attempted': 'direct-tcp', 'reason': 'peer_requires_relay',
+                'accepted': ['relay'], 'operation_executed_on_tcp': False}
+            response = self._ice_request(manager, op, args)
         return self._result(response)
 
     @staticmethod
@@ -374,7 +418,20 @@ class Client:
                     'untrusted_data': True, 'permissions': None, 'operations': None,
                     'next_action': 'Peer uses an older protocol. Obtain compatibility and grants '
                         'through the owner-authorized provisioning channel; do not assume permission.'}
-        return checked(result, self.node, self.peer_id)
+        result = checked(result, self.node, self.peer_id)
+        if 'peer-paths-v1' in result['features']:
+            info = self.request('paths')
+            if (not isinstance(info, dict) or set(info) != {'protocol', 'accepted', 'configured_ice', 'relay_only'}
+                    or info['protocol'] != PATH_PROTOCOL or type(info['configured_ice']) is not bool
+                    or type(info['relay_only']) is not bool
+                    or info['accepted'] not in (['direct-tcp'], ['relay'], ['direct-tcp', 'direct-ice', 'relay'])
+                    or info['relay_only'] != (info['accepted'] == ['relay'])
+                    or (not info['configured_ice'] and info['accepted'] != ['direct-tcp'])):
+                raise Invalid('invalid peer path hints')
+            result['paths'] = info
+        else:
+            result['paths'] = {'supported': False, 'accepted': None}
+        return result
 
     def fetch(self, rid, *, refresh=False):
         if type(refresh) is not bool:raise Invalid('refresh must be boolean')

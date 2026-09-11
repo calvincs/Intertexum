@@ -16,6 +16,7 @@ from .onboarding import load, policy, status
 
 RESOURCES={
     'agentmesh://instructions':('Agent instructions','text/plain'),
+    'agentmesh://reference':('Advanced agent reference','text/markdown'),
     'agentmesh://status':('Node status','application/json'),
     'agentmesh://policy':('Owner capability policy','application/json'),
 }
@@ -49,8 +50,11 @@ def running(node):
         thread=server.start() if server else None
         from .conversations import DeliveryWorker
         worker=DeliveryWorker(node);worker.start()
+        from .routing import Worker as RoutingWorker
+        router=RoutingWorker(node);router.start()
         try:yield
         finally:
+            router.close()
             worker.close()
             if server:server.shutdown();thread.join();server.server_close()
 
@@ -69,6 +73,7 @@ class LocalBackend:
             uri=request['uri']
             if uri not in RESOURCES:raise Invalid('unknown resource')
             if uri=='agentmesh://instructions':return files('agentmesh.assets').joinpath('llm.txt').read_text()
+            if uri=='agentmesh://reference':return files('agentmesh.assets').joinpath('agent-reference.md').read_text()
             return status(self.node) if uri=='agentmesh://status' else policy(self.node)
         if method=='tool/call' and set(request)=={'method','request'}:
             obj=request['request']

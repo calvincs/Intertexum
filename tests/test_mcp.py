@@ -56,6 +56,9 @@ def test_official_stdio_client_tools_resources_policy_and_retry(tmp_path):
             assert json.loads(policy.contents[0].text)['network'] is False
             instructions=await session.read_resource('agentmesh://instructions')
             assert instructions.contents[0].text.startswith('# Intertexum:')
+            reference=await session.read_resource('agentmesh://reference')
+            assert reference.contents[0].text.startswith('# Intertexum agent reference')
+            assert '## Errors and retries' in reference.contents[0].text
             missing=await session.call_tool('mesh_write',{'text':'No key.'})
             assert missing.is_error and missing.structured_content['error']['code']=='invalid_request'
             first=await session.call_tool('mesh_write',{'text':'MCP remembers across sessions.','idempotency_key':'once'})

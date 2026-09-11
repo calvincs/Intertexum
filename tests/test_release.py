@@ -7,6 +7,14 @@ from agentmesh.lifecycle import maintain, retain
 from conftest import publish
 
 
+def test_packaged_agent_guides_match_canonical_sources():
+    root = Path(__file__).resolve().parents[1]
+    instructions = (root / 'llm.txt').read_bytes()
+    assert (root / 'llms.txt').read_bytes() == instructions
+    assert (root / 'agentmesh/assets/llm.txt').read_bytes() == instructions
+    assert (root / 'agentmesh/assets/agent-reference.md').read_bytes() == (root / 'docs/AGENT_REFERENCE.md').read_bytes()
+
+
 @pytest.mark.parametrize('name', [
     'archived/conversation.md', '.scratch/notes.md', 'benchmarks/assets/model.onnx',
     'benchmarks/results/run.json', 'agentmesh/identity.key', 'examples/network-profile.json',

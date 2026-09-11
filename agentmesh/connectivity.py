@@ -134,7 +134,9 @@ class Session:
             channel.close();return
         self.channel=channel
         @channel.on('open')
-        def opened(): self.ready.set()
+        def opened():
+            self.ready.set()
+            self.owner.state['peers'][self.peer] = selected_path(self.pc)
         @channel.on('message')
         def message(data):
             try:
@@ -166,7 +168,7 @@ class Session:
                         else: raise Invalid('invalid data-channel RPC')
                 else: raise Invalid('unexpected frame')
             except (Invalid,TypeError,KeyError): channel.close()
-        if channel.readyState=='open': self.ready.set()
+        if channel.readyState=='open': opened()
 
     async def send(self, obj):
         async with self.send_lock:
@@ -499,6 +501,14 @@ class Connectivity:
             # host sockets. Do not create those paths in explicit relay-only mode.
             conn._use_ipv4=False;conn._use_ipv6=False
 
+    def record_candidates(self, pc):
+        candidates = ice_connection(pc).local_candidates
+        self.state['candidate_types'] = sorted({c.type for c in candidates})
+        reflexive = [c for c in candidates if c.type == 'srflx']
+        self.state['nat_mapping_observed'] = (any(
+            (c.host, c.port) != (c.related_address, c.related_port)
+            for c in reflexive) if reflexive else None)
+
     async def _signal(self, seed, obj):
         b=validate(obj,seed['id'],self.config['network']);args=b['args'];peer=b['origin']
         known=self.node.peer(peer)['card']
@@ -521,6 +531,7 @@ class Connectivity:
                 await s.pc.setRemoteDescription(RTCSessionDescription(sdp,'offer'))
                 self.tune(s.pc)
                 await s.pc.setLocalDescription(await s.pc.createAnswer())
+                self.record_candidates(s.pc)
                 await self._call(seed,'send',dict(to=peer,session=sid,generation=args['generation'],
                     type='answer',sdp=s.pc.localDescription.sdp))
             except BaseException:
@@ -550,10 +561,7 @@ class Connectivity:
                     s.attach(s.pc.createDataChannel('agentmesh-rpc-v1',ordered=True))
                     self.tune(s.pc)
                     await s.pc.setLocalDescription(await s.pc.createOffer())
-                    self.state['candidate_types']=sorted({c.type for c in ice_connection(s.pc).local_candidates})
-                    reflexive=[c for c in ice_connection(s.pc).local_candidates if c.type=='srflx']
-                    self.state['nat_mapping_observed']=(any((c.host,c.port)!=(c.related_address,c.related_port)
-                        for c in reflexive) if reflexive else None)
+                    self.record_candidates(s.pc)
                     self.answers.add(sid)
                     await self._call(seed,'send',dict(to=peer,session=sid,generation=self.generation('self'),
                         type='offer',sdp=s.pc.localDescription.sdp))
@@ -586,9 +594,9 @@ class Connectivity:
                 raise OSError('delivery status unknown; connection will be re-established for the next request')
         finally:self.tasks.discard(task)
 
-    def request(self, peer, op, args):
+    def request(self, peer, op, args, *, timeout=110):
         f=asyncio.run_coroutine_threadsafe(self.rpc(peer,op,args),self.loop)
-        try:return f.result(timeout=110)
+        try:return f.result(timeout=timeout)
         except TimeoutError:
             f.cancel();raise OSError('connectivity operation timed out')
 

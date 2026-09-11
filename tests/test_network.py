@@ -189,8 +189,9 @@ def test_relay_only_listener_rejects_direct_peer_data(live):
     (a, b, _), _ = live
     a.connectivity = SimpleNamespace(config={'relay_only': True})
     try:
-        with pytest.raises(Denied, match='relay-only'):
-            Client(b, a.id).request('capabilities')
+        assert Client(b, a.id).request('paths')['accepted'] == ['relay']
+        with pytest.raises(Denied, match='peer requires relay'):
+            Client(b, a.id).request('search', query_text='private')
     finally:
         a.connectivity = None
 
@@ -292,3 +293,25 @@ def test_requested_withdrawal_after_long_history_blocks_import_and_reshare(mesh,
     assert b._row(rid) is None
     assert b._withdrawn(rid, a.id)
     assert not b.db.execute('SELECT 1 FROM transit_cache').fetchone()
+
+
+def test_explicit_pre_dispatch_transport_refusal_falls_back(mesh, monkeypatch):
+    from types import SimpleNamespace
+    from agentmesh.network import PATH_PROTOCOL
+    a,b,_=mesh;client=Client(a,b.id);calls=[]
+    manager=SimpleNamespace(config={'relay_only':False},state={'peers':{}},
+        request=lambda peer,op,args: calls.append(op) or {'ok':True,'result':{'id':'delivered'}})
+    monkeypatch.setattr('agentmesh.connectivity.load_config',lambda node:{'relay_only':False})
+    monkeypatch.setattr('agentmesh.network.connectivity_manager',lambda node,config:manager)
+    response={'ok':False,'error':'transport_required','executed':False,
+        'paths':{'protocol':PATH_PROTOCOL,'accepted':['relay'],'configured_ice':True,'relay_only':True}}
+    monkeypatch.setattr(client,'_direct',lambda op,args:response)
+    assert client.request('message',message={})=={'id':'delivered'}
+    assert calls==['message']
+    assert manager.state['path_decisions'][b.id]['operation_executed_on_tcp'] is False
+    calls.clear();response['executed']=True
+    with pytest.raises(Invalid):client.request('message',message={})
+    assert not calls
+    response.clear();response.update(ok=False,error='denied',detail='permission denied')
+    with pytest.raises(Denied):client.request('message',message={})
+    assert not calls

@@ -44,7 +44,7 @@ agentmesh = "agentmesh.cli:main"
 packages = ["agentmesh", "agentmesh.assets", "agentmesh.assets.embedding"]
 
 [tool.setuptools.package-data]
-agentmesh = ["assets/embedding/*", "assets/llm.txt"]
+agentmesh = ["assets/embedding/*", "assets/llm.txt", "assets/agent-reference.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -19,7 +19,7 @@ def tool_definitions(schemas):
         schema=copy.deepcopy(item['input_schema']);name=item['name']
         if name in agent.MUTATIONS:
             schema['properties']['idempotency_key']={'type':'string','minLength':1,'maxLength':120,
-                'description':'Unique per intended mutation. Reuse unchanged on retries, including after reconnect. Never derive from MCP request IDs.'}
+                'description':'For a NEW operation, prepend status.new_mutation_key_prefix to a unique task key. Reuse the original key and identical arguments on retries, including after reconnect. Never derive from MCP request IDs.'}
             schema['required'].append('idempotency_key')
         result.append(types.Tool(name='mesh_'+name,description=item['description'],input_schema=schema,
             annotations=types.ToolAnnotations(read_only_hint=name not in agent.MUTATIONS,

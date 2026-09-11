@@ -56,19 +56,21 @@ def test_public_discovery_private_grants_and_no_implicit_migration(mesh):
     with pytest.raises(Denied):a.publish(child,audience=['@public'])
 
 
-def test_inbox_pages_ack_replay_and_receipt_epochs(mesh):
+@pytest.mark.parametrize('view', ['summary', 'full'])
+def test_inbox_pages_ack_replay_and_receipt_epochs(mesh, view):
     a,b,_=mesh
     for i in range(70):b.receive_message(a.make_message(b.id,'x'*32768,expires=int(time.time())+60),a.id)
+    replayed=b.inbox()[0]['message']
     seen=[];after=0
     while True:
-        result=tool(b,'read','inbox',after=after,limit=100)
+        result=tool(b,'read','inbox',after=after,limit=100,view=view)
         assert result['ok'];page=result['result'];assert len(canonical(result))<600000
         seen+=page['messages']
         if page['next'] is None:break
         after=page['next']
-    assert len(seen)==70 and len({m['message']['id'] for m in seen})==70
+    assert len(seen)==70 and len({m['id'] if view=='summary' else m['message']['id'] for m in seen})==70
     maintain(b,ack_before=2**63-1)
-    b.receive_message(seen[0]['message'],a.id);assert b.inbox()==[]
+    b.receive_message(replayed,a.id);assert b.inbox()==[]
     assert tool(a,'first','authorize',peer=b.id,permissions=[])['ok']
     assert tool(a,'retire','retire_receipts',expected_epoch=0)['result']['receipt_epoch']==1
     assert tool(a,'retire','retire_receipts',expected_epoch=0)['result']['receipt_epoch']==1

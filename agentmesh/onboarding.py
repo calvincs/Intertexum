@@ -127,11 +127,13 @@ def status(node):
     from .crypto import certificate
     from datetime import datetime,timezone
     expiry=certificate(node.identity.pem).not_valid_after_utc
-    return {'delivery_worker_running':bool(getattr(node,'delivery_worker',None) and node.delivery_worker.thread.is_alive()),'delivery_worker_error':getattr(node,'delivery_error',None),'certificate_expires':expiry.isoformat(),'certificate_renewal_due':(expiry-datetime.now(timezone.utc)).days<30,'storage':capacity(node),'id':node.id,'readiness':readiness,'capabilities':caps,'peers':peers,
+    storage=capacity(node)
+    return {'delivery_worker_running':bool(getattr(node,'delivery_worker',None) and node.delivery_worker.thread.is_alive()),'delivery_worker_error':getattr(node,'delivery_error',None),'certificate_expires':expiry.isoformat(),'certificate_renewal_due':(expiry-datetime.now(timezone.utc)).days<30,'storage':storage,'new_mutation_key_prefix':storage['new_mutation_key_prefix'],'id':node.id,'readiness':readiness,'capabilities':caps,'peers':peers,
             'connectivity_fresh':fresh,'connectivity':state,'model':node.model,
+            'transport_paths':__import__('agentmesh.network',fromlist=['paths']).paths(node),
             'text_token_limit':128 if node.model==embedding_profile()['id'] else None,
             'remote_operations_verified':False,
             'next_action':{'ready':'use search/send; remote permission checks still apply',
                 'waiting_for_peers':'start another node with the same authorized profile',
-                'not_connected':'start agent runtime; check seed reachability and profile',
-                'disabled':'owner must re-enable network or explicitly resume deregistered node'}[readiness]}
+                'not_connected':'local memory is available under owner policy; for discovery start the runtime and check the profile/seeds. Known peers may still be reachable; inspect peer_status',
+                'disabled':'network is disabled; use permitted local memory tools. Network resumption requires owner authorization'}[readiness]}

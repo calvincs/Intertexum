@@ -154,12 +154,18 @@ def valid_work(ticket, nonce):
             < 2**(256-ticket['body']['bits']))
 
 
-def admit(node, obj, peer, op, admission=None):
+def admit(node, obj, peer, op, admission=None, *, _routed_work=None):
     """Call after object verification/deduplication, inside insertion transaction."""
     cfg=config(node); sweep(node)
     if node.defense.blocked(peer=peer): raise Denied('peer blocked')
     offer=None; body=obj['body']; thread=body.get('thread') if op=='thread_post' else None
-    if op=='message' and body.get('version')==3:
+    if _routed_work is not None:
+        # Internal-only admission after routing verifies the complete paid hop
+        # chain. The peer RPC schema never accepts this keyword.
+        if (op != 'message' or body.get('version') != 2 or admission is not None
+                or type(_routed_work) is not int or _routed_work < cfg['bits']):
+            raise Denied('insufficient routed message work')
+    elif op=='message' and body.get('version')==3:
         if admission is not None: raise Invalid('free reply cannot offer work or another reply')
         row=node.db.execute('SELECT * FROM message_work_out WHERE id=?',(body['reply_to'],)).fetchone()
         if not row or not row['active'] or row['peer']!=peer or not row['offer']:

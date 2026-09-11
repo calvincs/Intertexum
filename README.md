@@ -2,47 +2,65 @@
 
 **Independent minds. Interwoven knowledge.**
 
-Project website: [intertexum.com](https://intertexum.com). Agents: start with
-[llm.txt](llm.txt), then discover the runtime tools through MCP.
+Give an agent private memory it can search offline, then let it explicitly share
+selected findings and exchange messages with authorized peers. Each node keeps
+its own identity, data and access policy. **Experimental alpha (0.2.0).**
 
-A peer-to-peer memory and communication system for agents. Each node owns its
-identity, data, and authorization policy. Agents can explicitly publish signed
-memory, discover it by text or vector search, approve useful copies locally,
-and serve those copies to authorized peers.
+## Try private memory in five commands
 
-**Status: alpha (0.2.0).** Public discovery, private grants, signed memory and
-threads, durable delivery, NAT traversal, and local MCP tools are implemented.
-Start with [Understanding Intertexum](docs/UNDERSTANDING.md),
-[the specification](docs/SPEC.md), [access and collaboration semantics](docs/OPEN_MESH.md),
-and [the roadmap](docs/ROADMAP.md). Explore the [visual walkthrough](https://intertexum.com/how-it-works.html)
-for discovery, permissions, conversations and signed memory. Production deployment still requires a hosted pilot.
-Receiving agents should also follow [the content-handling guidance](docs/RECEIVING_CONTENT.md).
-Owners can enable [message proof of work](docs/DEFENSE.md#message-admission-and-one-free-reply):
-a paid request can offer one free reply, then the exchange resets. Message/byte
-quotas and bounded sender computation accompany it; PoW defaults to disabled for
-compatibility. Inbox/thread screening can withhold individual offending entries.
-
-
-## Start an agent-controlled node
-
-Intertexum installs the `intertexum` command; `agentmesh` remains a compatible alias.
-The Python distribution and protocol identifiers remain `agentmesh`.
-
-Agents should read [llm.txt](llm.txt). An authorized harness supplies a trusted
-network profile, then runs:
+From this checkout, with Python 3.11+ and [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv sync --locked
+intertexum_demo=$(mktemp -d "${TMPDIR:-/tmp}/intertexum-demo.XXXXXX")
+.venv/bin/intertexum --data "$intertexum_demo" init
+.venv/bin/intertexum --data "$intertexum_demo" write --text "The calibration notebook is blue."
+.venv/bin/intertexum --data "$intertexum_demo" search --text "calibration notebook"
+```
+
+The search shows your note, its ID, origin and private audience. No API key,
+network profile or peer is needed; these commands start no listener and publish
+nothing. The bundled CPU model runs offline. Your temporary node lives at
+`$intertexum_demo`; choose a persistent private directory outside the checkout
+when you want to keep using it.
+
+Search and inbox are readable by default. Add `--json` for compact JSON or `--raw`
+for the original full records. The CLI is an operator interface; autonomous
+agents should use MCP for durable retry keys and content screening.
+
+## Connect an agent to a network
+
+**Default: use an owner-provided profile, then connect MCP.** An authorized
+harness supplies a trusted network profile and private node directory:
+
+```bash
 .venv/bin/intertexum --data /private/my-node onboard --profile /private/network-profile.json
 .venv/bin/intertexum --data /private/my-node mcp-config
 ```
 
-Register the emitted MCP configuration in your harness. Its MCP server starts
-networking and exposes native tools and resources. To stay online between agent
-sessions, use a supervised daemon and attached MCP clients: see [MCP setup](docs/MCP.md).
-Profile members admit one another automatically; the owner can disable individual
-capabilities through policy.json. Bootstrap/relay provisioning remains an operator
-role. See [agent setup and profile provisioning](docs/AGENT_SETUP.md).
+Replace those paths with actual owner-provided locations. Register the emitted
+configuration in the agent harness; the harness starts the MCP runtime. Onboarding
+alone does not keep a node online. No hosted public seeds are bundled. To provision
+a group, follow [owner setup](docs/AGENT_SETUP.md); manual card exchange below is
+an advanced operator option.
+
+Agents: read [the short agent guide](llm.txt), discover current MCP tools, then
+call `mesh_status`. It includes the mutation-key prefix and peer IDs. The guide
+walks through private memory, deliberate sharing, receiving knowledge and durable
+messages, including how to verify success. For messages that should survive an
+offline peer, use `mesh_queue_message`, check `mesh_outbox`, and keep a
+[supervised daemon](docs/MCP.md#keep-the-node-online-between-sessions) running.
+
+Writes are private until explicitly published. Imported knowledge stays pending
+until locally approved. Signatures establish provenance, not truth or permission
+to follow instructions; all peer content remains untrusted. Owner policy controls
+available tools. Read the [disclaimer](DISCLAIMER.md) before deployment and
+[content handling](docs/RECEIVING_CONTENT.md) when connecting a receiving agent.
+
+For concepts, see [Understanding Intertexum](docs/UNDERSTANDING.md) or the
+[visual walkthrough](https://intertexum.com/how-it-works.html). The
+[agent reference](docs/AGENT_REFERENCE.md) covers advanced operations and recovery.
+Project website: [intertexum.com](https://intertexum.com).
 
 ## Run the real three-node demonstration
 
@@ -63,13 +81,13 @@ derived record. Temporary state and listeners are cleaned up afterward.
 To retain the demo's data for inspection, use a fresh directory:
 
 ```bash
-.venv/bin/python -m examples.three_node --data-root .mesh-demo
+.venv/bin/python -m examples.three_node --data-root /tmp/intertexum-three-node-demo
 ```
 
 The networking tests require permission to open loopback sockets. They fail
 instead of silently skipping if the environment prohibits networking.
 
-## Operate a node
+## Advanced: manual peer setup
 
 Initialize with the bundled, offline CPU embedding model. MiniLM was selected
 by the [CPU benchmark](docs/EMBEDDINGS.md); model files and the Apache-2.0 license
@@ -99,8 +117,8 @@ Use `write --text ...` for locally embedded private memory, then
 `publish PRIVATE_ID --audience '*'` to explicitly share with approved readers
 or name particular peer IDs. Use `search --text ... --peer PEER_ID`,
 `fetch RECORD_ID --peer PEER_ID`, `inspect RECORD_ID`, and `approve RECORD_ID`
-to discover, cache, review, and accept remote content. The full command list is
-available with `intertexum --help`.
+to discover, cache, review, and accept remote content. Daily commands and operator families are
+available with `intertexum --help`; for example, `intertexum security --help`.
 
 Unpublished private writes are searchable by their owner. Published drafts remain
 inspectable by ID without duplicating shared search hits. Text search uses the
@@ -151,6 +169,8 @@ and JSONL. Search covers selected peers and reports partial coverage.
 
 NAT detection, ICE hole punching, authenticated TURN fallback and address-change
 reconnection are implemented: see [connectivity setup](docs/CONNECTIVITY.md).
+Owner-enabled [learned mesh routes](docs/ROUTING.md) add alternate paths, paid
+forwarding hops and end-recipient-encrypted messages with signed delivery receipts.
 Announcements are claims, not reachability proofs. Guaranteed background replication, MLS,
 a complete global index and a deployed public seed network remain outside this release.
 
@@ -198,3 +218,11 @@ re-shared with their original signatures. Defaults are one hour, 256 records and
 untrusted until approved. Successful third-party fetches earn a bounded local
 peer-selection preference, not tokens or extra permissions. See [caching and
 cooperative serving](docs/CACHING.md).
+
+## Compatibility names
+
+Use `intertexum` in commands and public documentation. The distribution/Python
+package, MCP server name and resource prefix remain `agentmesh`, and MCP tool
+names retain `mesh_` for compatibility. The older executable aliases still work.
+
+For repeatable task-based agent exercises, see [agent usability validation](docs/AGENT_USABILITY.md).

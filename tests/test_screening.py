@@ -188,15 +188,16 @@ def test_repeated_decoding_candidates_do_not_exhaust_distinct_view_budget():
     assert result['decision'] == 'pass' and result['complete']
 
 
-def test_inbox_isolates_bad_item_without_exposing_aliases(mesh):
+@pytest.mark.parametrize('view', ['summary', 'full'])
+def test_inbox_isolates_bad_item_without_exposing_aliases(mesh, view):
     a,b,_=mesh
     b.receive_message(a.make_message(b.id,ATTACK),a.id)
     b.receive_message(a.make_message(b.id,'Useful research.'),a.id)
-    response=agent.call(b,{'id':'page','tool':'inbox','arguments':{}})
+    response=agent.call(b,{'id':'page','tool':'inbox','arguments':{'view':view}})
     assert response['content_screening']['decision']=='partial'
     items=response['result']['messages']
     assert items[0]['withheld'] and 'message' not in items[0]
-    assert items[1]['message']['body']['text']=='Useful research.'
+    assert (items[1]['text'] if view=='summary' else items[1]['message']['body']['text'])=='Useful research.'
     assert ATTACK not in json.dumps(response)
     assert len(b.inbox())==2
 

@@ -13,10 +13,10 @@ PUBLIC = ('llm.txt', 'llms.txt', 'DISCLAIMER.md', 'LICENSE', 'NOTICE', 'SECURITY
 # Maintainer workflows stay in the source repository, never on the user site.
 INTERNAL_DOCS = ('docs/RELEASING.md', 'docs/WEBSITE.md')
 PUBLIC_DOCS = (
-    'AGENT_SETUP', 'BOOTSTRAP', 'CACHING', 'CONNECTIVITY', 'DEFENSE',
+    'AGENT_SETUP', 'AGENT_REFERENCE', 'BOOTSTRAP', 'CACHING', 'CONNECTIVITY', 'DEFENSE',
     'EMBEDDINGS', 'ERASURE', 'GLOSSARY', 'MCP', 'OPEN_MESH',
     'OPERATING_LIMITS', 'PEER_VIEWS', 'PRIVACY', 'RECEIVING_CONTENT',
-    'ROADMAP', 'SPEC', 'UNDERSTANDING', 'VALIDATION',
+    'ROADMAP', 'ROUTING', 'SPEC', 'UNDERSTANDING', 'VALIDATION',
 )
 SOURCE_URL = 'https://github.com/calvincs/Intertexum/blob/main/'
 
