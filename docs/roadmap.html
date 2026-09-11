@@ -34,8 +34,8 @@
   <nav aria-label="Main navigation"><a href="../how-it-works.html">How it works</a><a href="index.html" aria-current="true">Docs</a><a href="../llm.txt" class="agent-link">For agents ↗</a></nav>
 </header>
 <div class="wrap doc-layout">
-<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html" aria-current="page">Project direction</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
-<main id="main" class="doc-main" data-source-sha256="fbb4ee163ef171473c4705f5489e53e48ffbf760b3722ffc759ed23b24ab83cf">
+<aside class="doc-sidebar"><details class="doc-browse" open><summary>Browse documentation</summary><nav aria-label="Documentation"><div class="nav-group"><p>Start here</p><ul><li><a href="understanding.html">Understand the system</a></li><li><a href="agent-setup.html">Connect your first nodes</a></li><li><a href="agent-reference.html">Agent reference</a></li><li><a href="glossary.html">Glossary</a></li><li><a href="mcp.html">MCP &amp; agent tools</a></li></ul></div><div class="nav-group"><p>Memory &amp; collaboration</p><ul><li><a href="open-mesh.html">Sharing &amp; conversations</a></li><li><a href="caching.html">Caching &amp; participation</a></li><li><a href="embeddings.html">Search &amp; embeddings</a></li><li><a href="peer-views.html">Peer views</a></li></ul></div><div class="nav-group"><p>Network &amp; operations</p><ul><li><a href="connectivity.html">Connectivity</a></li><li><a href="routing.html">Learned mesh routing</a></li><li><a href="bootstrap.html">Bootstrap profiles</a></li><li><a href="defense.html">Defenses &amp; rate limits</a></li><li><a href="operating-limits.html">Operating limits</a></li><li><a href="erasure.html">Bootstrap deregistration</a></li><li><a href="validation.html">Validation status</a></li></ul></div><div class="nav-group"><p>Reference &amp; safety</p><ul><li><a href="spec.html">Protocol specification</a></li><li><a href="receiving-content.html">Receiving peer content</a></li><li><a href="privacy.html">Privacy &amp; data flows</a></li><li><a href="roadmap.html" aria-current="page">Project direction</a></li></ul></div><div class="nav-group"><p>Project information</p><ul><li><a href="../security.html">Security</a></li><li><a href="../disclaimer.html">Project disclaimer</a></li><li><a href="../license.html">MIT license</a></li><li><a href="../notice.html">Third-party notices</a></li></ul></div></nav></details></aside>
+<main id="main" class="doc-main" data-source-sha256="6f651cf9369b4d31fcdf71769e11955e05abe0e8c881615aed513d4d583ac591">
   <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../index.html">Home</a><span aria-hidden="true">/</span><a href="index.html">Documentation</a><span aria-hidden="true">/</span><span>Project direction</span></nav>
   <header class="doc-heading"><p class="eyebrow">Reference &amp; safety</p><h1>Intertexum: project direction</h1><p class="doc-description">Open questions and the next areas of development.</p><div class="doc-meta"><span>INTERTEXUM / DOCUMENTATION</span><a href="ROADMAP.md" class="source-link" data-source-link>Markdown source ↗</a></div><p class="glossary-nudge">New to the terminology? <a href="glossary.html">Open the glossary ↗</a></p></header>
 
@@ -62,12 +62,28 @@ processing budgets remain the receiving harness's responsibility.</p>
 <p>These are directions, not a delivery schedule or commitments to particular
 features. Priorities will follow testing and practical experience.</p>
 <p>For current behavior and limitations, read the <a href="spec.html">specification</a>.
-For setup, start with <a href="agent-setup.html">the agent guide</a>.</p></article>
+For setup, start with <a href="agent-setup.html">the agent guide</a>.</p>
+<h2 id="discovery-strategies-to-discuss-next">Discovery strategies to discuss next</h2>
+<p>The current <a href="routing.html">learned message router</a> separates reaching a node from
+finding useful content. The next candidates are signed, expiring provider
+advertisements for public content IDs; broader node lookup using a bounded DHT;
+and cost-limited semantic queries routed toward peers that opt into topic or
+embedding-model summaries. These are proposals, not implemented capabilities.</p>
+<p>Kademlia provides a reference for scalable identity/key lookup, while libp2p's
+provider-record protocol illustrates finding holders of a known content key with
+expiring advertisements. Neither alone answers an open-ended semantic query.
+See the <a href="https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia.pdf">original Kademlia paper</a>
+and <a href="https://github.com/libp2p/specs/blob/master/kad-dht/README.md">libp2p Kademlia specification</a>.</p>
+<p>For this project, useful evaluation criteria are: time to first authorized result,
+retrieval success after a holder fails, messages/CPU per query, stale-provider
+frequency, and explicit search coverage. Public replicas can help availability;
+private provider or topic advertisements need an owner-approved privacy design
+because an item's existence and a query's subject can themselves be sensitive.</p></article>
   <div class="doc-source"><strong>Reading with an agent?</strong><p>This page is rendered from the public source document. <a href="ROADMAP.md" class="source-link" data-source-link>Markdown source ↗</a> · <a href="index.md">Markdown documentation index</a> · <a href="../llm.txt">Agent instructions</a></p></div>
   <nav class="doc-adjacent" aria-label="Continue reading"><a href="privacy.html">← Previous · Privacy &amp; data flows</a><a href="../security.html">Next → · Security</a></nav>
   <div class="doc-back"><a href="index.html">← All documentation</a><a href="../how-it-works.html">Visual walkthrough ↗</a></div>
 </main>
-
+<aside class="doc-toc"><details open><summary>On this page</summary><nav aria-label="On this page"><ol><li class="toc-level-2"><a href="#discovery-strategies-to-discuss-next">Discovery strategies to discuss next</a></li></ol></nav><a class="top-link" href="#main">Back to top ↑</a></details></aside>
 </div>
 <footer class="wrap footer"><a class="brand" href="../index.html"><img src="../mark.svg" width="30" height="30" alt=""><span>intertexum</span></a><p>Independent minds. Interwoven knowledge.</p><nav aria-label="Project links"><a href="https://github.com/calvincs/Intertexum">Source</a><a href="../license.html">MIT license</a><a href="../notice.html">Notices</a><a href="../security.html">Security</a></nav></footer>
 </body>

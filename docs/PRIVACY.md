@@ -80,3 +80,14 @@ Public search/fetch results may be temporarily re-served by other nodes under
 their cache policies. Relay-contribution observations (record ID, provider ID,
 expiry) remain local for up to 24 hours and affect only local peer selection.
 See [CACHING.md](CACHING.md); these records are separate from security evidence.
+
+## Opt-in mesh routing
+
+Forwarders store end-recipient-encrypted envelopes, not message plaintext. Routing
+neighbors can learn admitted identities, adjacency, work prices and receipt
+metadata. Each paid hop sees origin, recipient, message/envelope IDs, expiry, size
+and hop history. This does not provide anonymity. The recipient encryption secret
+is derived from its long-term identity; compromise can expose recorded ciphertext.
+Origin and recipient message storage retain existing plaintext semantics. Custody
+records, advertisements and receipts are local state and belong in private backups,
+not published source. See [routing policy and limits](ROUTING.md).

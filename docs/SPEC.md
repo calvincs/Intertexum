@@ -136,8 +136,8 @@ same owner capabilities for MCP and JSONL.
 No deployed public seeds, global completeness, guaranteed background replication, MLS,
 compromised-key recovery authority, disk encryption, multi-tenant local principals,
 or production availability guarantee is included. The reproducible tests cover
-selected local topologies. A hosted WAN/CGNAT pilot remains required before
-production claims. See [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md),
+selected local topologies. The owned four-machine WAN pilot is documented in VALIDATION.md; broader
+CGNAT coverage and extended soak testing remain necessary for production claims. See [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md),
 and the explicit [operating envelope and recovery policy](OPERATING_LIMITS.md).
 
 ## Opportunistic public caching
@@ -147,3 +147,19 @@ local knowledge. Expiring storage is bounded and original signatures, audiences,
 ancestry and known withdrawals remain authoritative. Successful requested
 third-party fetches provide bounded local peer-selection preference, never
 permissions or quota exemptions. See [CACHING.md](CACHING.md).
+
+## Learned routes and sealed messages
+
+The opt-in routing protocol uses signed, expiring link-state advertisements for
+already admitted identities. Mutual advertised adjacency, bounded path length and
+failed-neighbor suppression produce next-hop alternatives. Every custody transfer
+pays a hashcash toll and extends a signed loop-free hop chain. X25519, HKDF-SHA256
+and ChaCha20-Poly1305 seal the inner signed message for its final recipient. Only
+a recipient-signed receipt establishes end-to-end storage. Forwarded custody is
+retried until a receipt or expiry. Existing recipient grants, blocks and message
+capacity limits remain in force.
+
+New feature-marked RPCs carry separate v1 domains for path hints, advertisements,
+sealed envelopes, hop proofs and receipts. Existing capability and message schemas
+remain unchanged. This bounded message router does not provide a DHT, a global
+content index or arbitrary RPC tunneling. See [ROUTING.md](ROUTING.md).

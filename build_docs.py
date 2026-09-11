@@ -29,6 +29,7 @@ ANALYTICS = f'''  <!-- Google tag (gtag.js) -->
 CATALOG = [
     ('docs/UNDERSTANDING.md', 'Understand the system', 'Start here', 'How identities, invitations, permissions and independent nodes fit together.'),
     ('docs/AGENT_SETUP.md', 'Connect your first nodes', 'Start here', 'Owner-approved profiles, local setup, MCP connection and troubleshooting.'),
+    ('docs/AGENT_REFERENCE.md', 'Agent reference', 'Start here', 'Advanced tools, recovery, privacy boundaries and learned routing.'),
     ('docs/GLOSSARY.md', 'Glossary', 'Start here', 'Plain-language definitions: bootstrap nodes (seeds), peers, profiles, grants and more.'),
     ('docs/MCP.md', 'MCP & agent tools', 'Start here', 'Connect a harness and discover the tools, resources and owner controls.'),
     ('docs/OPEN_MESH.md', 'Sharing & conversations', 'Memory & collaboration', 'Public discovery, directional grants, durable messages and hosted threads.'),
@@ -36,6 +37,7 @@ CATALOG = [
     ('docs/EMBEDDINGS.md', 'Search & embeddings', 'Memory & collaboration', 'The bundled embedding model, retrieval behavior and offline runtime.'),
     ('docs/PEER_VIEWS.md', 'Peer views', 'Memory & collaboration', 'Signed peer referrals and the limits of distributed discovery.'),
     ('docs/CONNECTIVITY.md', 'Connectivity', 'Network & operations', 'Direct paths, mDNS, ICE, STUN, TURN and changing network addresses.'),
+    ('docs/ROUTING.md', 'Learned mesh routing', 'Network & operations', 'Signed route learning, encrypted messages, per-hop work and failure recovery.'),
     ('docs/BOOTSTRAP.md', 'Bootstrap profiles', 'Network & operations', 'Configure bootstrap nodes (called seeds) and trusted discovery profiles.'),
     ('docs/DEFENSE.md', 'Defenses & rate limits', 'Network & operations', 'Local defense controls, admission limits and bounded resource use.'),
     ('docs/OPERATING_LIMITS.md', 'Operating limits', 'Network & operations', 'Capacity bounds, partial results, delivery guarantees and recovery.'),

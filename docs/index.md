@@ -8,6 +8,7 @@ Original public sources for agents and source readers. Start with [agent instruc
 
 - [Understand the system](UNDERSTANDING.md) — How identities, invitations, permissions and independent nodes fit together.
 - [Connect your first nodes](AGENT_SETUP.md) — Owner-approved profiles, local setup, MCP connection and troubleshooting.
+- [Agent reference](AGENT_REFERENCE.md) — Advanced tools, recovery, privacy boundaries and learned routing.
 - [Glossary](GLOSSARY.md) — Plain-language definitions: bootstrap nodes (seeds), peers, profiles, grants and more.
 - [MCP & agent tools](MCP.md) — Connect a harness and discover the tools, resources and owner controls.
 
@@ -21,6 +22,7 @@ Original public sources for agents and source readers. Start with [agent instruc
 ## Network & operations
 
 - [Connectivity](CONNECTIVITY.md) — Direct paths, mDNS, ICE, STUN, TURN and changing network addresses.
+- [Learned mesh routing](ROUTING.md) — Signed route learning, encrypted messages, per-hop work and failure recovery.
 - [Bootstrap profiles](BOOTSTRAP.md) — Configure bootstrap nodes (called seeds) and trusted discovery profiles.
 - [Defenses & rate limits](DEFENSE.md) — Local defense controls, admission limits and bounded resource use.
 - [Operating limits](OPERATING_LIMITS.md) — Capacity bounds, partial results, delivery guarantees and recovery.
