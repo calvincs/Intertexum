@@ -17,7 +17,7 @@ FORBIDDEN_PARTS = {'archived', '.scratch', 'scratch', 'notes-local', '.venv', 'v
                    '__pycache__', '.pytest_cache', '.git', '.codex', '.agents',
                    'node-data', 'nodes', 'backups', 'dist', 'build', '_site'}
 FORBIDDEN_NAMES = {'network-profile.json', 'connectivity.json', 'connectivity-status.json',
-                   'policy.json', 'message-policy.json', 'connectivity-suspended', 'runtime.lock'}
+                   'policy.json', 'source-policy.json', 'routing.json', 'message-policy.json', 'connectivity-suspended', 'runtime.lock'}
 FORBIDDEN_SUFFIXES = ('.key', '.pem', '.p12', '.pfx', '.sqlite', '.db', '.sock',
                       '.log', '.ses', '.pyc', '.pyo', '.tmp', '.part')
 SECRET = re.compile(rb'(?m)^-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----\s*$')

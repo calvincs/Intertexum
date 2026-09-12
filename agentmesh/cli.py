@@ -179,6 +179,9 @@ agent mutation retry keys and content screening.""",
     mr.add_argument("id", help="queued message ID")
     rc = command("routing-config", "set owner routing policy from a JSON file", family="connectivity", action="routing-config")
     rc.add_argument("file", type=Path)
+    sp = command("source-config", "set owner source policy or provider mode from JSON", family="security", action="source-config")
+    sp.add_argument("file", type=Path)
+    command("source-policy", "show owner source policy", family="security", action="source-policy")
     seed = command("bootstrap-serve", "run a separate discovery listener", family="bootstrap", action="serve")
     seed.add_argument("--host", default="127.0.0.1")
     seed.add_argument("--port", type=int, default=7444)
@@ -272,6 +275,9 @@ def run(args):
             if args.command == "init" else Node(args.data))
     try:
         cmd = args.command
+        if cmd in ('source-config','source-policy'):
+            from .source_policy import configure, config
+            return configure(node,decode(args.file.read_bytes())) if cmd=='source-config' else config(node)
         if cmd=='routing-config':
             from .routing import configure
             return configure(node,decode(args.file.read_bytes()))

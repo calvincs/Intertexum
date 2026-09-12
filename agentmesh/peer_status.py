@@ -15,6 +15,8 @@ def describe(node, requester):
     node.capability('network')
     permissions = node.peer(requester)['permissions']
     caps = policy(node)
+    from .source_policy import allowed
+    caps['receive'] = caps['receive'] and allowed(node, 'senders', requester)
     can_read = bool({'read', 'public'} & set(permissions))
     return {
         'protocol': PROTOCOL,

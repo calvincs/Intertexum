@@ -28,6 +28,8 @@ def receipt_guard(node,rid):
 
 
 def message_page(node,*,after=0,limit=50):
+    from .source_policy import allowed, config
+    if config(node)['mode'] == 'provider':raise Denied('source_policy_denied:provider_inbox')
     if type(after) is not int or after<0 or type(limit) is not int or not 1<=limit<=100:raise Invalid('invalid inbox page')
     with node.lock:
         node.db.execute('INSERT OR IGNORE INTO message_clock(id) SELECT id FROM messages ORDER BY rowid')
@@ -35,13 +37,15 @@ def message_page(node,*,after=0,limit=50):
         items=[];size=0;cursor=after
         for row in rows[:limit]:
             entry={'message':decode(row['wire'].encode()),'cursor':row['seq'],'untrusted_data':True}
+            if not allowed(node, 'senders', entry['message']['body']['origin']):
+                cursor=row['seq'];continue
             from .message_work import reply_info
             offered=reply_info(node,entry['message']['id'])
             if offered:entry['reply_offer']=offered
             cost=len(canonical(entry))
             if size+cost>PAGE_BYTES:break
             items.append(entry);size+=cost;cursor=row['seq']
-        return {'messages':items,'next':cursor if len(rows)>len(items) else None,'untrusted_data':True}
+        return {'messages':items,'next':cursor if rows and (len(rows)>limit or cursor<rows[-1]['seq']) else None,'untrusted_data':True}
 
 
 def retain(node,rid,*,priority=50,pinned=False,ttl=0,reject=False):

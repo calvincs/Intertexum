@@ -24,6 +24,8 @@ REQUIRED=agent.REQUIRED
 
 
 def enabled(node,name):
+    from .source_policy import config
+    if name == 'inbox' and config(node)['mode'] == 'provider':return False
     caps=policy(node)
     return name in agent.DEFINITIONS and all(caps[c] for c in REQUIRED.get(name,()))
 

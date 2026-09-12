@@ -68,12 +68,16 @@ def eligible(node,rid,*,reshare=True):
     return bool(row and row[0]>time.time())
 
 
-def remember(node,obj):
+def remember(node,obj,*,source=None):
     from .onboarding import policy
     caps=policy(node)
     if not all(caps[k] for k in ('cache','fetch','retain')):return False
     with node.transaction():
         body=node._verified_record(obj)
+        from .source_policy import require, require_record
+        require(node, 'authors', body['origin'])
+        if source is None:require_record(node, obj)
+        else:require(node, 'sources', source)
         rid=obj['id']
         if body['origin']==node.id or body['audience']!=['@public']:return False
         if node._withdrawn(rid,body['origin']) or node.db.execute('SELECT 1 FROM rejected WHERE id=?',(rid,)).fetchone():return False
@@ -86,6 +90,9 @@ def remember(node,obj):
         if len(wire)>opts['max_bytes']:return False
         if not previous and node.db.execute('SELECT count(*) FROM records').fetchone()[0]>=10000:return False
         node._save(obj,'pending')
+        if source is not None:
+            from .source_policy import remember_source
+            remember_source(node, obj, source)
         now=int(time.time())
         node.db.execute('INSERT OR REPLACE INTO transit_cache VALUES(?,?,?,?)',(rid,now+opts['ttl'],time.time_ns(),len(wire)))
         sweep(node)
@@ -131,7 +138,8 @@ def select_peers(node,limit=8):
             peer=p['card']['id']
             try:node.peer(peer)
             except Denied:continue
-            if not node.defense.blocked(peer=peer):candidates.append(peer)
+            from .source_policy import allowed
+            if not node.defense.blocked(peer=peer) and allowed(node,'sources',peer):candidates.append(peer)
         scores=dict(node.db.execute('SELECT peer,count(*) FROM relay_observations WHERE expires>? GROUP BY peer',(int(time.time()),)))
     rng=random.SystemRandom();rng.shuffle(candidates)
     preferred=[]

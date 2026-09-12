@@ -8,7 +8,7 @@ from .crypto import canonical,decode,digest,Invalid,Denied,Identity
 from .service import runtime_lock
 
 FILES={'identity.key','identity.pem','config.json','network-profile.json','connectivity.json',
-       'policy.json','message-policy.json','routing.json','connectivity-suspended'}
+       'policy.json','source-policy.json','message-policy.json','routing.json','connectivity-suspended'}
 DATABASES={'mesh.sqlite','defense.sqlite','connectivity.sqlite'}
 
 

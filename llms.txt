@@ -147,6 +147,17 @@ Routes and work do not grant permission. Never enable forwarding or raise owner
 work budgets yourself. Routed delivery has no cross-route ordering guarantee.
 See docs/ROUTING.md for owner setup, limits and metadata exposure.
 
+## Owner-selected sources and provider mode
+
+mesh_status.source_policy reports permitted serving nodes, signing authors and
+message senders. null means unrestricted; [] denies foreign identities. Search,
+fetch, inspection and cached/local reads obey this policy. Do not try another
+host or edit policy to bypass a denial. Older imports without supplier provenance
+need an allowed-source fetch before they become readable under a source list.
+Provider mode serves own publications and withdrawals, but disables consuming
+peer content, messaging, threads and mesh forwarding. Owners can still publish
+updates. See docs/AGENT_SETUP.md#trusted-sources-and-documentation-providers.
+
 ## Read results and recover without duplicate actions
 
 MCP returns ok plus result or error, and content_screening. Search, federated

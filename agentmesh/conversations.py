@@ -83,6 +83,8 @@ def create(node,content,members):
 
 def accept(node,obj,requester,admission=None):
     node.capability('threads');node.capability('receive')
+    from .source_policy import require
+    require(node,'senders',requester)
     b=checked(obj)
     if b['kind']!='reply' or b['origin']!=requester:raise Invalid('reply sender mismatch')
     if requester!=node.id:
@@ -112,6 +114,9 @@ def page(node,requester,*,thread=None,after=0,since_ms=0,until_ms=2**63-1,limit=
         if thread is not None:
             if not valid_id(thread):raise Invalid('invalid thread ID')
             root=_root(node,thread);_access(node,root,requester)
+            if requester==node.id:
+                from .source_policy import require
+                require(node,'authors',root['body']['origin'])
             rows=node.db.execute('SELECT seq,received,wire FROM posts WHERE thread=? AND seq>? AND received>=? AND received<=? ORDER BY seq LIMIT ?', (thread,after,since_ms,until_ms,limit+1)).fetchall()
         else:
             if requester!=node.id:node.require(requester,'read')
@@ -121,6 +126,10 @@ def page(node,requester,*,thread=None,after=0,since_ms=0,until_ms=2**63-1,limit=
         entries=[];cursor=after;size=len(canonical(root))
         for row in rows[:limit]:
             obj=decode(row['wire'].encode())
+            if requester==node.id:
+                from .source_policy import allowed
+                if not all(allowed(node,k,obj['body']['origin']) for k in ('authors','senders')):
+                    cursor=row['seq'];continue
             if thread is None:
                 try:_access(node,obj,requester)
                 except Denied:cursor=row['seq'];continue

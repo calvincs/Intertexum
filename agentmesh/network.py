@@ -161,6 +161,8 @@ def dispatch(node, peer_id, request):
         from .routing import accept
         return accept(node, peer_id, **args)
     if op == 'message_challenge' and set(args)=={'operation','id','thread','offer'}:
+        from .source_policy import require
+        require(node, 'senders', peer_id)
         from .message_work import challenge
         return challenge(node,peer_id,**args)
     if op == 'capabilities' and not args:
@@ -313,6 +315,32 @@ class Client:
         return response
 
     def request(self, op, **args):
+        from .source_policy import require, allowed
+        if op in ('search', 'get', 'threads'):
+            require(self.node, 'sources', self.peer_id)
+        result = self._permitted_request(op, **args)
+        if op == 'get':
+            body = self.node._verified_record(result)
+            require(self.node, 'authors', body['origin'])
+        elif op == 'search':
+            hits = result.get('results') if isinstance(result, dict) else None
+            if not isinstance(hits, list) or len(hits) > 20:
+                raise Invalid('invalid search result bounds')
+            kept = []
+            for hit in hits:
+                body = self.node._verified_record(hit['record'])
+                if allowed(self.node, 'authors', body['origin']):kept.append(hit)
+            result = {**result, 'results': kept, 'source_policy_filtered': len(hits)-len(kept)}
+        elif op == 'threads':
+            from .conversations import checked
+            if result.get('root'):
+                require(self.node, 'authors', checked(result['root'])['origin'])
+            result = {**result, 'items': [entry for entry in result['items']
+                if allowed(self.node, 'authors', checked(entry['object'])['origin'])
+                and allowed(self.node, 'senders', checked(entry['object'])['origin'])]}
+        return result
+
+    def _permitted_request(self, op, **args):
         try:
             return self._request(op,**args)
         except Denied as exc:
@@ -402,7 +430,7 @@ class Client:
                     raise Denied("remote result is withdrawn locally")
                 hit["untrusted_data"] = True
             from .cache import remember
-            for hit in result['results']:remember(self.node,hit['record'])
+            for hit in result['results']:remember(self.node,hit['record'],source=self.peer_id)
             return result
         except (KeyError, TypeError) as exc:
             raise Invalid("malformed search response") from exc
@@ -438,6 +466,8 @@ class Client:
         self.node.capability('network');self.node.capability('fetch')
         self.node.peer(self.peer_id)
         if self.node.defense.blocked(peer=self.peer_id):raise Denied('peer blocked')
+        from .source_policy import require
+        require(self.node, 'sources', self.peer_id)
         from .cache import hit,remember,credit
         if not refresh and hit(self.node,rid):return rid
         obj = self.request("get", id=rid)
@@ -450,8 +480,8 @@ class Client:
         # records before import, without adopting an unrelated lifetime history.
         self.sync_retractions(requested_record=obj)
         with self.node.transaction():
-            remember(self.node,obj)
-            result=self.node.ingest(obj)
+            remember(self.node,obj,source=self.peer_id)
+            result=self.node.ingest(obj,source=self.peer_id)
             credit(self.node,self.peer_id,obj)
             return result
 

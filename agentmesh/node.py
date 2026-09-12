@@ -94,6 +94,8 @@ class Node:
         cache_schema(self)
         from .routing import schema as routing_schema
         routing_schema(self)
+        from .source_policy import schema as source_schema
+        source_schema(self)
         self._migrate_retractions()
         # Rebuild once during startup, outside a remote request's time budget.
         self._refresh_search_index()
@@ -318,6 +320,12 @@ class Node:
         """Cheap current-policy prefilter; _active checks every selected ancestry."""
         from .onboarding import policy
         caps = policy(self)
+        from .source_policy import config as source_config
+        source_policy = source_config(self)
+        suppliers = {}
+        if source_policy['sources'] is not None:
+            for row in self.db.execute('SELECT record,source FROM record_sources'):
+                suppliers.setdefault(row[0], set()).add(row[1])
         own = requester == self.id
         reader = own or 'read' in self.peer(requester)['permissions']
         origins = {self.id: {'publish', 'public'}}
@@ -333,6 +341,10 @@ class Node:
         for rid, (state, origin, audience) in self._search_index.entries.items():
             check_budget(deadline)
             public = audience == ('@public',)
+            if origin != self.id:
+                if source_policy['mode'] == 'provider':continue
+                if source_policy['authors'] is not None and origin not in source_policy['authors']:continue
+                if source_policy['sources'] is not None and not suppliers.get(rid,set()).intersection(source_policy['sources']):continue
             if state == 'private':
                 if own and origin == self.id and rid not in drafts:
                     eligible.add(rid)
@@ -424,6 +436,8 @@ class Node:
         try:
             obj = self._stored_record(row, private=private)
             body = obj['body']
+            from .source_policy import require_record
+            require_record(self, obj)
             if private and body['origin'] != self.id:return None
             if cached and body['audience']!=['@public']:return None
             if requester!=self.id and body['origin']!=self.id:
@@ -452,7 +466,7 @@ class Node:
                 if body["audience"] == ["@public"] or (pa != ["*"] and (body["audience"] == ["*"] or not set(body["audience"]) <= allowed)):
                     raise Denied("derived memory cannot widen its parents' audience")
 
-    def ingest(self, obj):
+    def ingest(self, obj, *, source=None):
         self.capability("fetch")
         with self.lock:
             body = self._verified_record(obj)
@@ -461,7 +475,14 @@ class Node:
             if self._withdrawn(obj["id"], body["origin"]):
                 raise Denied("record has been withdrawn")
             if self.db.execute('SELECT 1 FROM rejected WHERE id=?',(obj['id'],)).fetchone():raise Denied('record rejected locally')
+            from .source_policy import require, require_record, remember_source
+            require(self, "authors", body["origin"])
+            if source is None:
+                require_record(self, obj)
+            else:
+                require(self, "sources", source)
             self._save(obj, "pending")
+            if source is not None:remember_source(self, obj, source)
             return obj["id"]
 
     def approve(self, rid):
@@ -472,6 +493,8 @@ class Node:
                 raise Invalid("no imported record to approve")
             obj = decode(row["wire"].encode())
             body = self._verified_record(obj)
+            from .source_policy import require_record
+            require_record(self, obj)
             if self._withdrawn(rid, body["origin"]) or not self._visible(body, self.id):
                 raise Denied("record withdrawn or inaccessible")
             self._check_parents(body)
@@ -489,7 +512,10 @@ class Node:
             row = self._row(rid)
             if row is None:
                 raise Invalid("unknown record")
-            return {"state": row["state"], "record": decode(row["wire"].encode()), "untrusted_data": True}
+            obj = decode(row["wire"].encode())
+            from .source_policy import require_record
+            require_record(self, obj)
+            return {"state": row["state"], "record": obj, "untrusted_data": True}
 
     def inventory(self):
         with self.lock:
@@ -644,6 +670,8 @@ class Node:
 
     def receive_message(self, obj, requester, admission=None, *, _routed_work=None):
         self.capability('receive')
+        from .source_policy import require
+        require(self, 'senders', requester)
         with self.transaction():
             self.require(requester, "message")
             body = verify(obj, self._key(requester), MESSAGE_DOMAIN)
@@ -675,6 +703,9 @@ class Node:
         return message_page(self,after=after,limit=limit)
 
     def inbox(self):
+        from .source_policy import allowed, config
+        if config(self)['mode'] == 'provider':raise Denied('source_policy_denied:provider_inbox')
         with self.lock:
             return [{"message": decode(row["wire"].encode()), "untrusted_data": True}
-                    for row in self.db.execute("SELECT wire FROM messages ORDER BY rowid")]
+                    for row in self.db.execute("SELECT wire FROM messages ORDER BY rowid")
+                    if allowed(self, "senders", decode(row["wire"].encode())["body"]["origin"])]

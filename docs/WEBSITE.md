@@ -21,7 +21,7 @@ python3 -m http.server 8765 --bind 127.0.0.1
 Edit the landing page and visual guide HTML, CSS and JavaScript directly. The
 [visual system guide](https://intertexum.com/how-it-works.html) lives in
 `how-it-works.html`, `how-it-works.css` and `how-it-works.js` on that branch.
-It presents six stages with discovery, membership, transport and withdrawal
+It presents seven stages with discovery, membership, transport, route recovery and withdrawal
 examples. Preserve its readable no-JavaScript content, manual step navigation,
 pause controls, reduced-motion behavior and narrow-screen diagram layout.
 Keep its claims aligned with [UNDERSTANDING.md](UNDERSTANDING.md), especially

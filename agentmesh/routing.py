@@ -28,7 +28,11 @@ DEFAULTS = dict(enabled=False, forward=False, neighbors=[], pow_bits=16,
 
 def config(node):
     p = node.directory / 'routing.json'
-    return validate_config(decode(p.read_bytes()) if p.exists() else {})
+    c = validate_config(decode(p.read_bytes()) if p.exists() else {})
+    from .source_policy import config as source_config
+    if source_config(node)['mode'] == 'provider':
+        c.update(enabled=False, forward=False)
+    return c
 
 
 def validate_config(values):

@@ -14,7 +14,11 @@ def policy(node):
     value=decode(path.read_bytes()) if path.exists() else {}
     if not isinstance(value,dict) or set(value)-set(CAPABILITIES) or any(type(v) is not bool for v in value.values()):
         raise Invalid('policy must map known capabilities to booleans')
-    return {k:value.get(k,True) for k in CAPABILITIES}
+    from .source_policy import config, PROVIDER_DISABLED
+    caps = {k:value.get(k,True) for k in CAPABILITIES}
+    if config(node)['mode'] == 'provider':
+        caps.update({k:False for k in PROVIDER_DISABLED})
+    return caps
 
 
 def require(node, capability):
@@ -108,6 +112,7 @@ def admit(node, body):
 
 
 def status(node):
+    from .source_policy import config as source_config
     from .embedding import profile as embedding_profile
     caps=policy(node)
     state=node.connectivity.state if node.connectivity else {}
@@ -128,7 +133,7 @@ def status(node):
     from datetime import datetime,timezone
     expiry=certificate(node.identity.pem).not_valid_after_utc
     storage=capacity(node)
-    return {'delivery_worker_running':bool(getattr(node,'delivery_worker',None) and node.delivery_worker.thread.is_alive()),'delivery_worker_error':getattr(node,'delivery_error',None),'certificate_expires':expiry.isoformat(),'certificate_renewal_due':(expiry-datetime.now(timezone.utc)).days<30,'storage':storage,'new_mutation_key_prefix':storage['new_mutation_key_prefix'],'id':node.id,'readiness':readiness,'capabilities':caps,'peers':peers,
+    return {'delivery_worker_running':bool(getattr(node,'delivery_worker',None) and node.delivery_worker.thread.is_alive()),'delivery_worker_error':getattr(node,'delivery_error',None),'certificate_expires':expiry.isoformat(),'certificate_renewal_due':(expiry-datetime.now(timezone.utc)).days<30,'storage':storage,'new_mutation_key_prefix':storage['new_mutation_key_prefix'],'id':node.id,'readiness':readiness,'capabilities':caps,'source_policy':source_config(node),'peers':peers,
             'connectivity_fresh':fresh,'connectivity':state,'model':node.model,
             'transport_paths':__import__('agentmesh.network',fromlist=['paths']).paths(node),
             'text_token_limit':128 if node.model==embedding_profile()['id'] else None,
