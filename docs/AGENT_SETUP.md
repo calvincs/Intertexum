@@ -323,3 +323,74 @@ use explicit retirement after reconciliation. A restart does not clear them.
 
 Continue with [memory and conversations](UNDERSTANDING.md#what-happens-to-a-memory),
 [current operating limits](OPERATING_LIMITS.md), and [backup/recovery](OPEN_MESH.md#harness-boundary-and-operations).
+
+## Trusted sources and documentation providers
+
+Owners can restrict content consumption independently of discovery and the
+permissions they grant visitors. Configure this through the owner CLI, using a
+private JSON file outside the checkout:
+
+```bash
+intertexum --data /private/node security source-config /private/source-policy.json
+intertexum --data /private/node security source-policy
+```
+
+The file replaces the previous source policy. Omitted lists and `null` mean
+unrestricted; an empty list denies all foreign identities. Values are pinned node
+IDs (signing-key fingerprints), never hostnames or IP addresses. For example,
+replace these descriptive placeholders with actual IDs before applying:
+
+```json
+{
+  "version": 1,
+  "mode": "standard",
+  "sources": ["APPROVED_SERVING_NODE_ID"],
+  "authors": ["DOCUMENTATION_PUBLISHER_ID"],
+  "senders": ["APPROVED_MESSAGE_SENDER_ID"]
+}
+```
+
+- `sources` restricts which peers may be queried for memory or threads, including
+  explicit requests and automatic federated selection. It does not prevent
+  discovery, connection setup or withdrawals from already known peers.
+- `authors` restricts the signing origins of returned records and thread content.
+  A permitted server may hold another author's public copies; both lists apply.
+- `senders` restricts incoming direct messages (including routed delivery) and
+  thread replies. Existing inbox and thread entries are filtered on later reads.
+  It does not grant a sender message permission or exempt it from admission work.
+
+Restrictions apply to fetch, inspection, approval, local search, transit caches
+and re-serving imported records. A policy change hides disallowed content without
+silently deleting stored data. Own records remain available, subject to their
+normal ancestry and audience checks. Supplier provenance is retained with newly
+cached/imported records. Older imports without supplier provenance become
+unavailable under a source list until fetched again from an allowed server.
+Changing a server's IP does not change its signing identity; replacing its key
+requires the owner to update the lists. Lists have a maximum of 256 identities.
+
+For an operator who only publishes documentation, use:
+
+```json
+{"version": 1, "mode": "provider"}
+```
+
+Provider mode permits serving the node's own published records and signed
+withdrawals. It disables outbound search/fetch, importing and approval, messaging
+(including reading an existing inbox), threads, transit caching, re-sharing others'
+records and mesh routing/forwarding, even if routing was previously enabled.
+Owners can still write, publish and withdraw documentation. Connectivity,
+authentication, discovery and maintenance remain available; this is a restricted
+content service, not a process that performs literally no background operations.
+A provider may use TURN for its own connections; it does not become a TURN server.
+Existing `policy.json` capability denials still apply, including `serve_memory`.
+
+The policy takes effect at subsequent operation checks and survives restart and
+backup/restore. An already returned response or operation past its authorization
+check cannot be recalled. Configure before starting traffic for a strict cutover.
+Switching back to `standard` restores the underlying capability/routing settings;
+review them before doing so. There is no agent tool that edits this owner policy.
+`mesh_status` includes `source_policy`, and capability hints reflect sender denials.
+
+Pinning a documentation publisher establishes provenance, not factual correctness
+or permission for its documents to issue instructions. These are local controls;
+existing peers need no wire-protocol upgrade to query a provider.

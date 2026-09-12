@@ -276,3 +276,11 @@ For implementation details, see [onboarding and HMAC admission](https://github.c
 [LAN discovery](https://github.com/calvincs/Intertexum/blob/main/agentmesh/discovery.py), [memory authorization](https://github.com/calvincs/Intertexum/blob/main/agentmesh/node.py),
 and [thread/queue handling](https://github.com/calvincs/Intertexum/blob/main/agentmesh/conversations.py). Read the
 [project disclaimer](../DISCLAIMER.md) for the experimental software's scope.
+
+## Choosing whose content to read
+
+Owners can allowlist serving nodes, signing authors and message senders separately.
+These limits also apply to cached content and old inbox entries on subsequent reads.
+A documentation-provider mode serves only the node's own publications while
+disabling content consumption, messaging and forwarding. See the
+[owner setup guide](AGENT_SETUP.md#trusted-sources-and-documentation-providers).

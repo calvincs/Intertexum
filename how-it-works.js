@@ -3,7 +3,7 @@
   const root = document.querySelector('.journey');
   const stages = [...root.querySelectorAll('.stage')];
   const links = [...root.querySelectorAll('[data-step]')];
-  const names = ['Own your node', 'Find your peers', 'Decide what’s allowed', 'Open a conversation', 'Share a memory', 'Learn a withdrawal'];
+  const names = ['Own your node', 'Find your peers', 'Decide what’s allowed', 'Open a conversation', 'Route around a failure', 'Share a memory', 'Learn a withdrawal'];
   const play = document.querySelector('#play');
   const motion = document.querySelector('#motion');
   const previous = document.querySelector('#previous');
@@ -35,8 +35,8 @@
       if (i === current) link.setAttribute('aria-current', 'step');
       else link.removeAttribute('aria-current');
     });
-    document.querySelector('#step-count').textContent = `0${current + 1} / 06`;
-    status.textContent = `Step ${current + 1} of 6: ${names[current]}.`;
+    document.querySelector('#step-count').textContent = `0${current + 1} / 0${stages.length}`;
+    status.textContent = `Step ${current + 1} of ${stages.length}: ${names[current]}.`;
     previous.disabled = current === 0;
     next.disabled = current === stages.length - 1;
     if (updateHash) history.replaceState(null, '', `#step-${current + 1}`);
@@ -68,7 +68,7 @@
   // User focus inside a step pauses progression so controls cannot disappear mid-use.
   document.querySelector('.stages').addEventListener('focusin', () => { playing = false; updatePlayback(); });
   window.addEventListener('hashchange', () => {
-    const match = location.hash.match(/^#step-([1-6])$/);
+    const match = location.hash.match(/^#step-([1-7])$/);
     if (match) show(Number(match[1]) - 1, false);
   });
   const set = (selector, text) => { document.querySelector(selector).textContent = text; };
@@ -84,7 +84,14 @@
       const value = button.dataset.value;
       const diagram = document.querySelector(`[data-demo="${kind}"]`);
       diagram.dataset.mode = value;
-      if (kind === 'discovery') {
+      if (kind === 'routing') {
+        const captions = {
+          healthy: 'Two learned routes: A → B → D and A → C → D. Each receiving hop requires proof of work.',
+          failure: 'B fails or stops completing delivery. After failure detection or a missing-receipt retry, A tries C. The message keeps its ID; D deduplicates retries.',
+          receipt: 'D stores the message and signs a final receipt. That receipt propagates back to A: delivered means stored, not processed.'
+        };
+        set('[data-routing-foot]', captions[value]);
+      } else if (kind === 'discovery') {
         const lan = value === 'lan';
         set('[data-discovery-label]', lan ? 'Local discovery · IPv4 mDNS' : 'Bootstrap nodes · introductions');
         set('[data-discovery-description]', lan ? 'Running nodes with the same network name announce themselves on the LAN.' : 'Trusted bootstrap nodes forward signed introductions and help peers arrange a connection.');
@@ -131,6 +138,6 @@
   document.querySelector('.playback').hidden = false;
   document.querySelector('.step-footer').hidden = false;
   document.querySelector('.simulation-control').hidden = false;
-  const match = location.hash.match(/^#step-([1-6])$/);
+  const match = location.hash.match(/^#step-([1-7])$/);
   show(match ? Number(match[1]) - 1 : 0, false);
 })();
