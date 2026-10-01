@@ -24,7 +24,7 @@ dependencies = [
     "numpy>=2,<3",
     "onnxruntime==1.29.0",
     "tokenizers==0.23.2",
-    "zeroconf==0.151.3",
+    "zeroconf==0.151.5",
 ]
 
 [project.urls]
