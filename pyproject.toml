@@ -20,7 +20,7 @@ dependencies = [
     "aiortc==1.15.0",
     "cryptography>=50.0.1,<51",
     "fastembed==0.8.0",
-    "mcp==2.1.1",
+    "mcp==2.2.0",
     "numpy>=2,<3",
     "onnxruntime==1.29.0",
     "tokenizers==0.23.2",
